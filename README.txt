@@ -1,241 +1,199 @@
-If your goal is:
-
-When Raspberry Pi 3 powers ON → Automatically boot → Connect to Wi-Fi → Open a web link in full-screen automatically (Kiosk Mode).
-
-Follow these steps.
-
-Step 1: Install Raspberry Pi OS
-
-Install:
-
-✅ Raspberry Pi OS (64-bit) Desktop
-
-Step 2: First Boot
-
-Connect
-
-HDMI Display
-Keyboard
-Mouse
-Wi-Fi
-
-Complete
-
-Language
-Country
-Timezone
-Password
-Wi-Fi
-Step 3: Update Raspberry Pi
-
-Open Terminal.
-
+Production Kiosk Setup for Raspberry Pi 3 (Debian 13 / Trixie)
+Step 1: Update the system
 sudo apt update
 sudo apt full-upgrade -y
 sudo reboot
-Step 4: Install Chromium
+Step 2: Install Chromium
+sudo apt install chromium -y
 
-Normally already installed.
-
-Check:
-
-chromium-browser --version
-
-or
+Verify:
 
 chromium --version
-
-If not installed:
-
-sudo apt install chromium-browser -y
-Step 5: Disable Screen Sleep
-
-Open
-
-Menu
-→ Preferences
-→ Raspberry Pi Configuration
-
-Disable
-
-Screen blanking
-
-or
-
-Terminal
-
+Step 3: Enable Auto Login
 sudo raspi-config
 
-Navigate to:
-
-Display Options
-
-↓
-
-Screen Blanking
-
-↓
-
-No
-Step 6: Disable Power Saving
-
-Edit
-
-sudo nano /etc/xdg/lxsession/LXDE-pi/autostart
-
-Add
-
-@xset s off
-@xset -dpms
-@xset s noblank
-
-Save
-
-CTRL+O
-
-ENTER
-
-CTRL+X
-Step 7: Create Autostart Directory
-mkdir -p ~/.config/autostart
-Step 8: Create Chromium Autostart
-nano ~/.config/autostart/kiosk.desktop
-
-Paste
-
-[Desktop Entry]
-Type=Application
-Name=Chromium Kiosk
-Exec=chromium-browser --kiosk --incognito --noerrdialogs --disable-infobars --disable-session-crashed-bubble --check-for-update-interval=31536000 https://YOUR_LINK_HERE
-
-Example
-
-Exec=chromium-browser --kiosk --incognito https://google.com
-
-or
-
-Exec=chromium-browser --kiosk http://192.168.1.10:8000
-
-Save.
-
-Step 9: Hide Mouse Cursor
-
-Install
-
-sudo apt install unclutter -y
-
-Edit
-
-nano ~/.config/autostart/kiosk.desktop
-
-Example
-
-[Desktop Entry]
-Type=Application
-Exec=sh -c "unclutter -idle 0.5 & chromium-browser --kiosk --incognito https://YOUR_LINK"
-Step 10: Auto Login
-
-Open
-
-sudo raspi-config
-
-Go to
+Go to:
 
 System Options
-
-↓
-
+    ↓
 Boot / Auto Login
-
-↓
-
+    ↓
 Desktop Autologin
-Step 11: Reboot
-sudo reboot
 
-After reboot
+Reboot.
 
-Power ON
+Step 4: Disable Screen Blanking
+sudo raspi-config
 
-↓
+Go to:
 
-Desktop loads
+Display Options
+    ↓
+Screen Blanking
+    ↓
+No
 
-↓
+Reboot.
 
-Chromium starts
-
-↓
-
-Website opens
-
-↓
-
-Fullscreen
-
-↓
-
-No mouse
-
-↓
-
-No keyboard required
-Optional: Disable Chromium Error Messages
-
-Use:
-
-chromium-browser \
---kiosk \
---incognito \
---disable-infobars \
---disable-session-crashed-bubble \
---no-first-run \
---disable-restore-session-state \
---overscroll-history-navigation=0 \
-https://YOUR_LINK
-Optional: Automatically Restart Chromium if it Crashes
-
-Create a launcher script:
-
+Step 5: Install Unclutter
+sudo apt install unclutter -y
+Step 6: Create Kiosk Folder
 mkdir -p ~/kiosk
+Step 7: Create Startup Script
 nano ~/kiosk/start.sh
 
 Paste:
 
 #!/bin/bash
 
+# Wait for desktop and network
+sleep 10
+
+# Hide mouse cursor
+unclutter -idle 0.5 -root &
+
 while true
 do
-    chromium-browser \
-    --kiosk \
-    --incognito \
-    --disable-infobars \
-    --no-first-run \
-    https://YOUR_LINK
+    chromium \
+        --kiosk \
+        --incognito \
+        --no-first-run \
+        --disable-session-crashed-bubble \
+        --disable-infobars \
+        --disable-restore-session-state \
+        --overscroll-history-navigation=0 \
+        --disable-features=TranslateUI \
+        --disable-sync \
+        --no-default-browser-check \
+        --disable-gpu \
+        https://rfc-towards-sustainability.netlify.app/
 
     sleep 2
 done
 
-Make it executable:
+Save:
 
+CTRL + O
+ENTER
+CTRL + X
+Step 8: Make Executable
 chmod +x ~/kiosk/start.sh
+Step 9: Create Autostart Folder
+mkdir -p ~/.config/autostart
+Step 10: Create Autostart File
+nano ~/.config/autostart/kiosk.desktop
 
-Then change the autostart entry:
+Paste:
 
+[Desktop Entry]
+Type=Application
+Name=Chromium Kiosk
 Exec=/home/pi/kiosk/start.sh
+Terminal=false
+X-GNOME-Autostart-enabled=true
 
-This will automatically relaunch Chromium if it exits unexpectedly.
+Save.
 
-Production Setup Checklist
-✅ Raspberry Pi OS (64-bit)
-✅ Auto Login enabled
-✅ Chromium installed
-✅ Kiosk Mode
-✅ Full-screen browser
-✅ Screen blanking disabled
-✅ Power saving disabled
-✅ Mouse cursor hidden
-✅ Browser restarts automatically if it crashes
-✅ Starts automatically on every power-on
+Step 11: Test Chromium
 
-This setup is suitable for digital signage, dashboards, industrial HMIs, kiosk displays, and web-based control panels.
+Before rebooting, make sure Chromium works:
+
+chromium https://google.com
+
+If Chromium opens normally, continue.
+
+Step 12: Reboot
+sudo reboot
+Expected Boot Sequence
+Power ON
+
+↓
+
+Wi-Fi Connects
+
+↓
+
+Desktop Auto Login
+
+↓
+
+Desktop Loads
+
+↓
+
+Mouse Hidden
+
+↓
+
+Chromium Starts
+
+↓
+
+Website Opens
+
+↓
+
+Fullscreen Kiosk
+
+↓
+
+If Chromium Closes
+
+↓
+
+Automatically Restarts
+If the Browser Doesn't Start
+
+Open a terminal and run:
+
+/home/pi/kiosk/start.sh
+
+If there is an error, it will be displayed in the terminal.
+
+Verify Chromium Command
+
+Check where Chromium is installed:
+
+which chromium
+
+Expected:
+
+/usr/bin/chromium
+
+If it returns:
+
+/usr/bin/chromium-browser
+
+edit ~/kiosk/start.sh and replace every occurrence of:
+
+chromium
+
+with:
+
+chromium-browser
+Check Autostart File
+cat ~/.config/autostart/kiosk.desktop
+
+It should display:
+
+[Desktop Entry]
+Type=Application
+Name=Chromium Kiosk
+Exec=/home/pi/kiosk/start.sh
+Terminal=false
+X-GNOME-Autostart-enabled=true
+Production Checklist
+✅ Raspberry Pi OS (Debian 13 / Trixie)
+✅ Desktop Autologin Enabled
+✅ Chromium Installed
+✅ Screen Blanking Disabled
+✅ Mouse Cursor Hidden
+✅ Chromium Starts Automatically
+✅ Full-Screen Kiosk Mode
+✅ Automatic Browser Restart
+✅ Boots Directly to Dashboard
+One important question before you recreate the kiosk setup:
+
+When you renamed ~/.config/autostart/kiosk.desktop to kiosk.desktop.bak and rebooted, did the Raspberry Pi desktop appear normally, or is it still showing a black screen?
+
+The answer determines whether the issue is in the kiosk configuration or the desktop environment itself.
