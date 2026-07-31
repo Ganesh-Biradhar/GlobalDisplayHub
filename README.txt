@@ -47,25 +47,35 @@ Paste:
 #!/bin/bash
 
 # Wait for desktop and network
-sleep 10
+sleep 5
 
 # Hide mouse cursor
 unclutter -idle 0.5 -root &
+
+mkdir -p /home/pi/.config/chromium-kiosk
 
 while true
 do
     chromium \
         --kiosk \
+        --start-fullscreen \
         --incognito \
+        --user-data-dir=/home/pi/.config/chromium-kiosk \
+        --password-store=basic \
         --no-first-run \
+        --no-default-browser-check \
+        --disable-sync \
         --disable-session-crashed-bubble \
         --disable-infobars \
         --disable-restore-session-state \
-        --overscroll-history-navigation=0 \
-        --disable-features=TranslateUI \
-        --disable-sync \
-        --no-default-browser-check \
+        --disable-features=PasswordManagerEnabled,TranslateUI \
+        --disable-background-networking \
+        --disable-component-update \
+        --disable-default-apps \
+        --disable-popup-blocking \
+        --disable-extensions \
         --disable-gpu \
+        --overscroll-history-navigation=0 \
         https://rfc-towards-sustainability.netlify.app/
 
     sleep 2
@@ -76,6 +86,65 @@ Save:
 CTRL + O
 ENTER
 CTRL + X
+
+
+
+
+					OR
+
+
+
+#!/bin/bash
+
+# Wait briefly for the desktop
+sleep 2
+
+# Hide mouse cursor
+unclutter -idle 0 -root &
+
+# Create Chromium profile
+mkdir -p /home/pi/.config/chromium-kiosk
+
+# Wait until network is available
+until ping -c1 8.8.8.8 >/dev/null 2>&1
+do
+    sleep 1
+done
+
+while true
+do
+    chromium \
+        --kiosk \
+        --start-fullscreen \
+        --incognito \
+        --user-data-dir=/home/pi/.config/chromium-kiosk \
+        --password-store=basic \
+        --no-first-run \
+        --no-default-browser-check \
+        --disable-sync \
+        --disable-session-crashed-bubble \
+        --disable-infobars \
+        --disable-restore-session-state \
+        --disable-features=PasswordManagerEnabled,TranslateUI \
+        --disable-background-networking \
+        --disable-component-update \
+        --disable-default-apps \
+        --disable-popup-blocking \
+        --disable-extensions \
+        --disable-gpu \
+        --overscroll-history-navigation=0 \
+        https://rfc-towards-sustainability.netlify.app/
+
+    sleep 2
+done
+
+Save:
+
+CTRL + O
+ENTER
+CTRL + X
+
+
 Step 8: Make Executable
 chmod +x ~/kiosk/start.sh
 Step 9: Create Autostart Folder
@@ -197,3 +266,32 @@ One important question before you recreate the kiosk setup:
 When you renamed ~/.config/autostart/kiosk.desktop to kiosk.desktop.bak and rebooted, did the Raspberry Pi desktop appear normally, or is it still showing a black screen?
 
 The answer determines whether the issue is in the kiosk configuration or the desktop environment itself.
+
+
+
+
+
+✅ Best Choice: Disable the GNOME Keyring service
+
+This is the cleanest and most reliable approach because your kiosk does not need to store passwords or secrets.
+
+Run:
+
+systemctl --user disable gnome-keyring-daemon.service
+systemctl --user mask gnome-keyring-daemon.service
+systemctl --user disable gnome-keyring-daemon.socket
+systemctl --user mask gnome-keyring-daemon.socket
+rm -rf ~/.local/share/keyrings
+sudo reboot
+Also keep these Chromium flags:
+--user-data-dir=/home/pi/.config/chromium-kiosk
+--password-store=basic
+--disable-features=PasswordManagerEnabled,TranslateUI
+Why this is the best option
+✅ No keyring popups
+✅ Best for 24/7 unattended operation
+✅ Faster startup
+✅ No impact on a kiosk that only displays a web page
+✅ Chromium still works normally for your signage application
+
+I do not recommend relying only on entering the password or creating a blank keyring, because those approaches can still result in prompts under some circumstances. Disabling the keyring service is generally the most robust solution for a dedicated kiosk setup.
