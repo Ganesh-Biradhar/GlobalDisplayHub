@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ramoji Film City — Towards Sustainability</title>
+<style>
+  :root{
+    --bg-dark:#04060f;
+    --bg-mid:#141a33;
+    --bg-light:#3a4066;
+    --white:#ffffff;
+    --green:#3ddc5b;
+    --mint:#7de8c4;
+    --line:#5a6088;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  html,body{
+    width:100%;
+    height:100%;
+    background:#000;
+    overflow:hidden;
+    font-family:'Arial', 'Helvetica Neue', Helvetica, sans-serif;
+  }
+
+  /* ===== SCREEN / MONITOR FRAME ===== */
+  .stage{
+    width:100%;
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#000;
+  }
+
+  .screen{
+    position:relative;
+    width:100%;
+    height:100%;
+    max-width:1600px;
+    max-height:900px;
+    background: radial-gradient(circle at 55% 45%, var(--bg-light) 0%, var(--bg-mid) 45%, var(--bg-dark) 100%);
+    color:var(--white);
+    /* extra horizontal padding = "space at sides" from the sketch */
+    padding:3.2vh 7vw 2.5vh 7vw;
+    display:flex;
+    flex-direction:column;
+    box-shadow: inset 0 0 120px rgba(0,0,0,0.6);
+  }
+
+  /* ===== HEADER ===== */
+  .header{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:1.6vh;
+    border-bottom:1px solid var(--line);
+    padding-bottom:2.2vh;
+  }
+
+  .logo-wrap{
+    background:transparent;   /* removes white box */
+    border-radius:0;
+    padding:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:none;
+  }
+
+  .logo{
+    height:9.2vh;
+    min-height:90px;
+    display:block;
+    image-rendering:-webkit-optimize-contrast;
+    image-rendering:crisp-edges;
+  }
+
+  .header h1{
+    font-size:clamp(20px, 3.1vw, 42px);
+    font-weight:800;
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+    color:var(--white);
+    text-shadow: 0 0 10px rgba(255,255,255,0.15);
+    text-align:center;
+    white-space:nowrap;
+  }
+
+  /* ===== BODY ===== */
+  .body{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding-top:2.4vh;
+    /* keep body content away from the very edges too */
+    max-width:1180px;
+    width:100%;
+    margin:0 auto;
+  }
+
+  /* Section title now sits centered in the middle of the page,
+     like "SetupName" in the sketch, with its own breathing room
+     above and below before the data rows begin. */
+  .section-title{
+    font-size:clamp(20px, 2.8vw, 34px);
+    font-weight:800;
+    color:var(--green);
+    text-transform:uppercase;
+    letter-spacing:1px;
+    text-shadow:0 0 12px rgba(61,220,91,0.35);
+    text-align:center;
+    width:100%;
+    padding:1.2vh 0 1.6vh 0;
+  }
+
+  .divider{
+    height:2px;
+    width:70%;
+    background: linear-gradient(90deg, rgba(90,96,136,0), var(--line) 50%, rgba(90,96,136,0));
+    margin:0 auto 3vh auto;
+  }
+
+  .rows{
+    display:flex;
+    flex-direction:column;
+    gap:2.6vh;
+    flex:1;
+    width:100%;
+    justify-content:center;
+  }
+
+  .row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    padding:0 1.5vw;
+  }
+
+  .row .label{
+    font-size:clamp(17px, 1.95vw, 27px);
+    font-weight:900;
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+    color:var(--white);
+    text-shadow:0 0 6px rgba(255,255,255,0.12);
+  }
+
+  .row .value{
+    font-size:clamp(18px, 2.3vw, 31px);
+    font-weight:900;
+    text-align:right;
+    text-shadow:0 0 6px rgba(255,255,255,0.15);
+  }
+
+  .value.green{ color:var(--green); text-shadow:0 0 10px rgba(61,220,91,0.45); }
+  .value.mint{ color:var(--mint); text-shadow:0 0 10px rgba(125,232,196,0.45); }
+  .value.white{ color:var(--white); }
+
+  /* ===== FOOTER ===== */
+  .footer{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding-top:2vh;
+    font-size:clamp(11px, 1.1vw, 15px);
+    font-weight:700;
+    letter-spacing:0.4px;
+    text-transform:uppercase;
+    color:#c9cde0;
+    opacity:0.85;
+  }
+
+  .footer .last-updated{
+    font-weight:600;
+    opacity:0.7;
+    letter-spacing:0.2px;
+  }
+
+  /* fade transition between slides */
+  .screen{
+    animation: fadeIn 0.6s ease;
+  }
+  @keyframes fadeIn{
+    from{ opacity:0; }
+    to{ opacity:1; }
+  }
+
+  /* progress dots */
+  .dots{
+    position:absolute;
+    bottom:1.6vh;
+    left:50%;
+    transform:translateX(-50%);
+    display:flex;
+    gap:8px;
+  }
+  .dot{
+    width:8px;
+    height:8px;
+    border-radius:50%;
+    background:rgba(255,255,255,0.25);
+    transition:background 0.3s ease;
+  }
+  .dot.active{
+    background:var(--green);
+    box-shadow:0 0 8px rgba(61,220,91,0.7);
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="screen" id="screen">
+    <div class="header">
+      <div class="logo-wrap">
+        <img class="logo" id="logoImg" src="ramoji_logo.png" alt="Ramoji Film City">
+      </div>
+      <h1>Ramoji Film City &nbsp; Towards Sustainability</h1>
+    </div>
+
+    <div class="body">
+      <div class="section-title" id="sectionTitle">Clean Environment</div>
+      <div class="divider"></div>
+      <div class="rows" id="rows"><!-- rows injected by JS --></div>
+    </div>
+
+    <div class="footer">
+      <span>Environmental Monitoring Online</span>
+      <span class="last-updated" id="lastUpdated">Last updated: --</span>
+      <span id="screenCounter">Screen 1 of 5</span>
+    </div>
+
+    <div class="dots" id="dots"></div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   RAMOJI FILM CITY — SUSTAINABILITY DASHBOARD
+   Editable data-driven slideshow.
+   - Change numbers in the SLIDES array below.
+   - Slides auto-advance every SLIDE_INTERVAL_MS.
+   - The whole page auto-reloads every RELOAD_INTERVAL_MS
+     (simulating a fresh data pull from the server).
+   ========================================================= */
+
+// ---------- CONFIG ----------
+const SLIDE_INTERVAL_MS  = 5000;              // 5 seconds per slide
+const RELOAD_INTERVAL_MS = 60 * 60 * 1000;    // 1 hour auto-reload
+
+// ---------- EDITABLE DATA ----------
+// value classes: "green" | "mint" | "white"
+const SLIDES = [
+  {
+    title: "Clean Environment",
+    rows: [
+      { label: "Air Quality",   value: "GOOD (AQI 42)", cls: "green" },
+      { label: "PM2.5",         value: "12 µg/m³",      cls: "white" },
+      { label: "Temperature",   value: "31.2 °C",       cls: "white" },
+      { label: "Humidity",      value: "60 %",          cls: "white" },
+      { label: "Water TDS",     value: "185 mg/L",      cls: "white" },
+      { label: "Water Quality", value: "SAFE",          cls: "green" }
+    ]
+  },
+  {
+    title: "Green Environment",
+    rows: [
+      { label: "Trees",       value: "45,280",       cls: "white" },
+      { label: "Green Area",  value: "320 Acres",    cls: "white" },
+      { label: "New Trees",   value: "1,250",        cls: "white" },
+      { label: "Green Cover", value: "68 % Progress",cls: "white" },
+      { label: "Plantation",  value: "IN PROGRESS",  cls: "mint" }
+    ]
+  },
+  {
+    title: "Green Energy",
+    rows: [
+      { label: "Solar Today",  value: "3,420 kWh",  cls: "white" },
+      { label: "This Month",   value: "86,400 kWh", cls: "white" },
+      { label: "CO₂ Saved",    value: "2.8 Tonnes",  cls: "white" },
+      { label: "Power Status", value: "NOMINAL",     cls: "mint" },
+      { label: "Clean Energy", value: "YES",         cls: "mint" }
+    ]
+  },
+  {
+    title: "Water Management",
+    rows: [
+      { label: "Recycled Today", value: "650 KL",  cls: "white" },
+      { label: "Borewells",      value: "28",       cls: "white" },
+      { label: "STP Status",     value: "NORMAL",   cls: "mint" },
+      { label: "Rain Harvest",   value: "ACTIVE",   cls: "mint" },
+      { label: "Save Water",     value: "",          cls: "white" }
+    ]
+  },
+  {
+    title: "Solid Waste Management",
+    rows: [
+      { label: "Segregated",     value: "100 %",      cls: "white" },
+      { label: "Kitchen Waste",  value: "1,200 kg",   cls: "white" },
+      { label: "Compost",        value: "320 kg",     cls: "white" },
+      { label: "Recyclables",    value: "480 kg",     cls: "white" },
+      { label: "Zero Waste Goal",value: "ON TRACK",   cls: "mint" }
+    ]
+  }
+];
+
+// ---------- RENDER ----------
+let currentSlide = 0;
+
+const sectionTitleEl = document.getElementById('sectionTitle');
+const rowsEl         = document.getElementById('rows');
+const screenCounter  = document.getElementById('screenCounter');
+const dotsEl         = document.getElementById('dots');
+const lastUpdatedEl  = document.getElementById('lastUpdated');
+const screenEl       = document.getElementById('screen');
+
+function buildDots(){
+  dotsEl.innerHTML = '';
+  SLIDES.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === currentSlide ? ' active' : '');
+    dotsEl.appendChild(d);
+  });
+}
+
+function renderSlide(index){
+  const slide = SLIDES[index];
+  sectionTitleEl.textContent = slide.title;
+
+  rowsEl.innerHTML = '';
+  slide.rows.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      <div class="label">${r.label}</div>
+      <div class="value ${r.cls || 'white'}">${r.value}</div>
+    `;
+    rowsEl.appendChild(row);
+  });
+
+  screenCounter.textContent = `Screen ${index + 1} of ${SLIDES.length}`;
+  buildDots();
+
+  // retrigger fade animation
+  screenEl.style.animation = 'none';
+  void screenEl.offsetWidth;
+  screenEl.style.animation = 'fadeIn 0.6s ease';
+}
+
+function updateTimestamp(){
+  const now = new Date();
+  lastUpdatedEl.textContent = 'Last updated: ' + now.toLocaleString();
+}
+
+function nextSlide(){
+  currentSlide = (currentSlide + 1) % SLIDES.length;
+  renderSlide(currentSlide);
+}
+
+// ---------- INIT ----------
+updateTimestamp();
+renderSlide(currentSlide);
+setInterval(nextSlide, SLIDE_INTERVAL_MS);
+setInterval(updateTimestamp, 1000);
+
+// Auto-reload the page every hour to simulate fresh data being pulled.
+// In a real deployment, replace this with a fetch() call to your live
+// sensor/API endpoint that repopulates the SLIDES array instead of a
+// full page reload.
+setTimeout(() => {
+  location.reload();
+}, RELOAD_INTERVAL_MS);
+</script>
+
+</body>
+</html>
