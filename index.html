@@ -1,0 +1,2732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#102019">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Ramoji Film City environmental digital-signage dashboard">
+  <title>Ramoji Film City — Environment Display</title>
+
+  <!--
+    RFC ENVIRONMENT DASHBOARD — PRODUCTION FIREBASE CLIENT
+
+    DATA SOURCE:
+      Firebase Realtime Database
+
+    DEVICE PATH:
+      devices/rfc-environment-001/latest
+
+    ESP32:
+      Publishes a validated dashboard snapshot approximately once per minute.
+
+    IMPORTANT DATA RULE:
+      - Fresh Firebase data is displayed immediately.
+      - The last valid snapshot is cached locally.
+      - If Firebase stops updating, the last valid values remain visible.
+      - Stale/cached values are NEVER presented as LIVE.
+      - A newer valid Firebase snapshot immediately replaces cached data.
+      - Browser reloads/restarts can restore the last cached snapshot.
+  -->
+
+  <style>
+    :root{
+      --green:#2f9d5b;
+      --green-dark:#126b3a;
+      --green-deep:#075f35;
+      --green-soft:#eaf7ef;
+      --green-border:#55bb77;
+      --ink:#102019;
+      --muted:#607068;
+      --rule:rgba(24,93,57,.14);
+      --screen:#f6faf7;
+      --surface:rgba(255,255,255,.88);
+      --surface-strong:rgba(255,255,255,.96);
+      --shadow:0 14px 36px rgba(18,62,39,.11);
+      --radius:22px;
+      --footer:72px;
+      --transition:520ms;
+    }
+
+    *{box-sizing:border-box}
+
+    html,body{
+      width:100%;
+      height:100%;
+      margin:0;
+      overflow:hidden;
+      background:#102019;
+      color:var(--ink);
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+      -webkit-font-smoothing:antialiased;
+      text-rendering:optimizeLegibility;
+    }
+
+    button{font:inherit}
+
+    .app{
+      width:100vw;
+      height:100dvh;
+      background:
+        radial-gradient(circle at 10% 10%,rgba(75,194,126,.15),transparent 28%),
+        radial-gradient(circle at 90% 85%,rgba(73,145,188,.12),transparent 30%),
+        linear-gradient(145deg,#e9efeb,#ccd6d0);
+    }
+
+    .screen{
+      position:relative;
+      width:100%;
+      height:100%;
+      overflow:hidden;
+      background:var(--screen);
+    }
+
+    .slides{
+      position:relative;
+      width:100%;
+      height:100%;
+    }
+
+    .slide{
+      position:absolute;
+      inset:0;
+      display:flex;
+      flex-direction:column;
+      padding:clamp(20px,3vh,42px) clamp(24px,4.4vw,82px) var(--footer);
+      opacity:0;
+      transform:translate3d(2%,0,0) scale(.995);
+      pointer-events:none;
+      transition:opacity var(--transition) ease,transform var(--transition) ease;
+      background:
+        radial-gradient(circle at 0 0,rgba(73,199,125,.06),transparent 25%),
+        linear-gradient(145deg,#fbfefc,#f4f9f6);
+    }
+
+    .slide.active{
+      z-index:2;
+      opacity:1;
+      transform:none;
+      pointer-events:auto;
+    }
+
+    .slide.inert{
+      visibility:hidden;
+    }
+
+    .title{
+      margin:0 auto;
+      max-width:1200px;
+      text-align:center;
+      font-size:clamp(25px,2.7vw,52px);
+      font-weight:850;
+      line-height:1.05;
+      letter-spacing:-.03em;
+    }
+
+    .subtitle{
+      margin:7px auto 0;
+      text-align:center;
+      color:var(--green-dark);
+      font-size:clamp(11px,1vw,19px);
+      font-weight:800;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+
+    .rule{
+      height:1px;
+      flex:0 0 1px;
+      margin:clamp(12px,1.5vh,24px) 0 clamp(14px,2vh,30px);
+      background:linear-gradient(90deg,transparent,var(--rule) 12%,var(--rule) 88%,transparent);
+    }
+
+    .footer{
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      height:var(--footer);
+      display:grid;
+      place-items:center;
+      padding:0 80px;
+      border-top:1px solid rgba(35,116,67,.13);
+      background:linear-gradient(180deg,#e6f4eb,#dceee2);
+      color:#214d34;
+      font-size:clamp(9px,.85vw,17px);
+      font-weight:800;
+      letter-spacing:.035em;
+      text-align:center;
+      text-transform:uppercase;
+    }
+
+    /* Cover */
+    .cover{
+      justify-content:flex-start;
+      padding-top:clamp(18px,3vh,46px);
+    }
+
+    .cover .title{
+      font-size:clamp(28px,3vw,60px);
+    }
+
+    .hero{
+      width:min(55%,720px);
+      height:min(65%,620px);
+      min-height:180px;
+      margin:clamp(14px,2vh,28px) auto;
+      object-fit:cover;
+      border-radius:20px;
+      box-shadow:0 18px 46px rgba(18,62,39,.18);
+    }
+
+    .cover-copy{
+      max-width:850px;
+      margin:0 auto;
+      color:var(--green-dark);
+      text-align:center;
+      font-size:clamp(15px,1.4vw,28px);
+      font-weight:800;
+      line-height:1.3;
+    }
+
+    /* Common cards */
+    .card{
+      min-width:0;
+      min-height:0;
+      border:1px solid rgba(31,111,65,.14);
+      border-radius:var(--radius);
+      background:var(--surface);
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(10px);
+      -webkit-backdrop-filter:blur(10px);
+    }
+
+    .air-grid{
+      display:grid;
+      grid-template-columns:minmax(270px,34%) 1fr;
+      gap:clamp(14px,2vw,30px);
+      flex:1;
+      min-height:0;
+    }
+
+    .aqi{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      padding:clamp(18px,2.4vw,42px);
+    }
+
+    .aqi-icon{
+      width:min(75%,260px);
+      max-height:220px;
+      margin-bottom:12px;
+    }
+
+    .eyebrow{
+      color:var(--muted);
+      font-size:clamp(11px,1vw,19px);
+      font-weight:800;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+
+    .big-number{
+      color:var(--green-deep);
+      font-size:clamp(70px,8vw,160px);
+      font-weight:900;
+      line-height:.9;
+      letter-spacing:-.06em;
+      font-variant-numeric:tabular-nums;
+    }
+
+    .pill,.status-pill,.soft-band{
+      border:1px solid rgba(41,138,78,.12);
+      border-radius:999px;
+      background:linear-gradient(180deg,#eaf8ef,#d7efdf);
+      box-shadow:inset 0 1px rgba(255,255,255,.7);
+      color:#075d30;
+      font-weight:850;
+    }
+
+    .pill{
+      padding:.45em 1.2em;
+      font-size:clamp(13px,1.2vw,23px);
+    }
+
+    .metric-table{
+      display:grid;
+      grid-template-rows:auto repeat(3,1fr);
+      overflow:hidden;
+    }
+
+    .table-head,.table-row{
+      display:grid;
+      grid-template-columns:1.35fr .9fr .8fr;
+      align-items:center;
+      padding:0 clamp(12px,1.5vw,26px);
+      border-bottom:1px solid var(--rule);
+    }
+
+    .table-head{
+      min-height:50px;
+      background:rgba(224,242,231,.5);
+      color:#51635a;
+      text-align:center;
+      font-size:clamp(9px,.9vw,17px);
+      font-weight:850;
+      letter-spacing:.05em;
+    }
+
+    .table-row:last-child{border-bottom:0}
+
+    .parameter{
+      font-size:clamp(14px,1.4vw,28px);
+      font-weight:850;
+    }
+
+    .reading{
+      text-align:center;
+      color:var(--green-deep);
+      font-size:clamp(32px,3.7vw,72px);
+      font-weight:900;
+      line-height:.95;
+      font-variant-numeric:tabular-nums;
+    }
+
+    .unit{
+      display:block;
+      margin-top:.25em;
+      color:var(--muted);
+      font-size:.34em;
+      font-weight:500;
+    }
+
+    /* Weather */
+    .weather-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:clamp(14px,2vw,30px);
+      flex:1;
+      min-height:0;
+    }
+
+    .weather-card{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      padding:30px;
+    }
+
+    .weather-label{
+      color:var(--muted);
+      font-size:clamp(13px,1.2vw,23px);
+      font-weight:850;
+      text-transform:uppercase;
+      letter-spacing:.07em;
+    }
+
+    .weather-value{
+      color:var(--green-deep);
+      font-size:clamp(65px,7vw,140px);
+      font-weight:900;
+      line-height:1;
+      letter-spacing:-.055em;
+      font-variant-numeric:tabular-nums;
+    }
+
+    .status-pill{
+      margin-top:14px;
+      padding:.4em 1.05em;
+      color:#075d30;
+      font-size:clamp(11px,1vw,19px);
+    }
+
+    /* Water */
+    .water-grid,.solar-grid,.green-grid{
+      display:grid;
+      grid-template-columns:minmax(220px,31%) 1fr;
+      gap:clamp(14px,2vw,30px);
+      flex:1;
+      min-height:0;
+    }
+
+    .drop-panel,.art-panel{
+      display:grid;
+      place-items:center;
+      padding:24px;
+    }
+
+    .drop-svg,.art-panel svg{
+      width:78%;
+      height:78%;
+      max-height:330px;
+    }
+
+    .drop-caption{
+      margin-top:-20px;
+      color:var(--muted);
+      font-size:clamp(11px,1vw,19px);
+      font-weight:850;
+      text-transform:uppercase;
+    }
+
+    .water-table{
+      display:grid;
+      grid-template-rows:auto repeat(3,1fr);
+      overflow:hidden;
+    }
+
+    /* Water conservation */
+    .icon-grid,.waste-grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:clamp(12px,1.6vw,26px);
+      flex:1;
+      min-height:0;
+    }
+
+    .icon-card,.waste-card{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      padding:clamp(18px,2vw,34px);
+      text-align:center;
+    }
+
+    .icon-graphic{
+      width:min(42%,160px);
+      height:42%;
+      max-height:190px;
+      margin-bottom:14px;
+    }
+
+    .icon-title,.waste-title{
+      color:var(--ink);
+      font-size:clamp(12px,1.1vw,21px);
+      font-weight:900;
+      line-height:1.1;
+      letter-spacing:.035em;
+      text-transform:uppercase;
+    }
+
+    .icon-desc,.waste-desc{
+      max-width:28ch;
+      margin-top:8px;
+      color:var(--muted);
+      font-size:clamp(9px,.8vw,15px);
+      line-height:1.35;
+    }
+
+    /* Solar / Green */
+    .two-metrics{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      grid-template-rows:1fr auto;
+      overflow:hidden;
+      min-height:0;
+    }
+
+    .two-metrics>div{
+      display:grid;
+      align-content:center;
+      justify-items:center;
+      padding:22px;
+      text-align:center;
+    }
+
+    .two-metrics>div:nth-child(2){
+      border-left:1px solid var(--rule);
+    }
+
+    .metric-label{
+      color:var(--muted);
+      font-size:clamp(11px,1vw,19px);
+      font-weight:850;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+    }
+
+    .dash{
+      margin:8px 0;
+      color:var(--green-deep);
+      font-size:clamp(46px,5vw,96px);
+      font-weight:900;
+      line-height:.9;
+      letter-spacing:-.06em;
+      font-variant-numeric:tabular-nums;
+    }
+
+    .soft-band{
+      grid-column:1/-1;
+      margin:0 18px 18px;
+      padding:12px 18px;
+      border-radius:16px;
+      color:var(--muted);
+      text-align:center;
+      font-size:clamp(9px,.8vw,15px);
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+
+    .soft-band strong{
+      display:block;
+      margin-top:4px;
+      color:var(--green-dark);
+      font-size:1.45em;
+    }
+
+    /* Waste */
+    .waste-card{
+      gap:12px;
+    }
+
+    .waste-icon{
+      width:min(55%,210px);
+      height:44%;
+      max-height:220px;
+    }
+
+    .waste-action{
+      color:var(--green-dark);
+      font-size:clamp(10px,.95vw,18px);
+      font-weight:900;
+      text-transform:uppercase;
+    }
+
+    /* Thank you */
+    .thank-grid{
+      display:grid;
+      grid-template-columns:34% 1fr;
+      gap:30px;
+      align-items:center;
+      flex:1;
+      min-height:0;
+    }
+
+    .people-art{
+      display:grid;
+      place-items:center;
+      padding:25px;
+    }
+
+    .people-art svg{
+      width:75%;
+      height:auto;
+      max-height:400px;
+    }
+
+    .thanks-copy{
+      display:grid;
+      place-content:center;
+      min-height:100%;
+      padding:40px;
+      text-align:center;
+    }
+
+    .thanks-copy .green{
+      color:var(--green-dark);
+      font-size:clamp(13px,1.2vw,23px);
+      font-weight:900;
+    }
+
+    .thanks-copy h2{
+      margin:.5em 0;
+      font-size:clamp(22px,2.1vw,42px);
+      line-height:1.15;
+      text-transform:uppercase;
+    }
+
+    /* Status */
+    .data-status{
+      position:absolute;
+      top:16px;
+      right:18px;
+      z-index:60;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      max-width:min(46vw,520px);
+      padding:8px 14px;
+      border:1px solid rgba(255,255,255,.2);
+      border-radius:999px;
+      background:rgba(7,27,17,.86);
+      color:#fff;
+      box-shadow:0 12px 30px rgba(0,0,0,.18);
+      backdrop-filter:blur(12px);
+      font-size:clamp(9px,.75vw,14px);
+      font-weight:850;
+      line-height:1.2;
+    }
+
+    .data-status .dot{
+      width:10px;
+      height:10px;
+      flex:0 0 10px;
+      border-radius:50%;
+      background:#8c9b94;
+      box-shadow:0 0 0 3px rgba(255,255,255,.08);
+    }
+
+    .data-status.live .dot{background:#59e38a}
+    .data-status.cached .dot{background:#f2c34d}
+    .data-status.stale .dot{background:#f2a84d}
+    .data-status.offline .dot{background:#ef6a60}
+    .data-status.loading .dot{background:#73b7dc}
+
+    .status-banner{
+      position:absolute;
+      top:68px;
+      left:50%;
+      z-index:55;
+      transform:translate(-50%,-150%);
+      max-width:min(78vw,760px);
+      padding:10px 18px;
+      border:1px solid rgba(255,255,255,.15);
+      border-radius:999px;
+      background:rgba(8,35,21,.94);
+      color:#fff;
+      opacity:0;
+      pointer-events:none;
+      transition:.25s ease;
+      text-align:center;
+      font-size:clamp(11px,.85vw,16px);
+      font-weight:750;
+    }
+
+    .status-banner.show{
+      transform:translate(-50%,0);
+      opacity:1;
+    }
+
+    /* Controls */
+    .controls{
+      position:absolute;
+      inset:0;
+      z-index:20;
+      pointer-events:none;
+    }
+
+    .nav{
+      position:absolute;
+      top:50%;
+      width:52px;
+      height:82px;
+      transform:translateY(-50%);
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:0 14px 14px 0;
+      background:rgba(9,35,22,.72);
+      color:#fff;
+      font-size:42px;
+      cursor:pointer;
+      pointer-events:auto;
+      opacity:.16;
+      transition:.2s ease;
+    }
+
+    .nav:hover,.nav:focus-visible{
+      opacity:.95;
+      background:rgba(18,107,58,.92);
+    }
+
+    .next{
+      right:0;
+      border-radius:14px 0 0 14px;
+    }
+
+    .prev{left:0}
+
+    .dots{
+      position:absolute;
+      left:50%;
+      bottom:5px;
+      transform:translateX(-50%);
+      display:flex;
+      align-items:center;
+      gap:5px;
+      padding:4px 7px;
+      border:1px solid rgba(24,70,43,.10);
+      border-radius:999px;
+      background:rgba(255,255,255,.72);
+      box-shadow:0 5px 14px rgba(18,62,39,.08);
+      pointer-events:auto;
+    }
+
+    .dot-btn{
+      width:6px;
+      height:6px;
+      padding:0;
+      border:0;
+      border-radius:50%;
+      background:#87958e;
+      cursor:pointer;
+      transition:all .2s ease;
+    }
+
+    .dot-btn.active{
+      width:18px;
+      height:6px;
+      border-radius:999px;
+      background:#3daa68;
+    }
+
+    /* Overlays */
+    .loading-overlay,.fatal-overlay{
+      position:absolute;
+      inset:0;
+      z-index:80;
+      display:grid;
+      place-items:center;
+      padding:24px;
+      background:rgba(6,21,13,.92);
+      color:#fff;
+      text-align:center;
+      backdrop-filter:blur(12px);
+    }
+
+    .overlay-card{
+      width:min(92%,560px);
+      padding:38px;
+      border:1px solid rgba(255,255,255,.13);
+      border-radius:26px;
+      background:rgba(255,255,255,.08);
+      box-shadow:0 24px 70px rgba(0,0,0,.3);
+    }
+
+    .loader{
+      width:58px;
+      height:58px;
+      margin:0 auto 22px;
+      border:5px solid rgba(255,255,255,.18);
+      border-top-color:#69d18b;
+      border-radius:50%;
+      animation:spin .8s linear infinite;
+    }
+
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .action-button{
+      min-height:44px;
+      padding:11px 20px;
+      border:0;
+      border-radius:12px;
+      background:#5fd487;
+      color:#082f1a;
+      font-weight:900;
+      cursor:pointer;
+    }
+
+    .diagnostics{
+      position:absolute;
+      right:16px;
+      bottom:calc(var(--footer) + 18px);
+      z-index:70;
+      width:min(440px,88%);
+      max-height:60%;
+      overflow:auto;
+      padding:14px;
+      border:1px solid rgba(93,227,139,.22);
+      border-radius:14px;
+      background:rgba(4,19,10,.95);
+      color:#dff5e5;
+      font:12px/1.45 Consolas,monospace;
+      white-space:pre-wrap;
+      box-shadow:0 18px 48px rgba(0,0,0,.32);
+    }
+
+    [hidden]{display:none!important}
+
+    .sr-only{
+      position:absolute!important;
+      width:1px!important;
+      height:1px!important;
+      padding:0!important;
+      margin:-1px!important;
+      overflow:hidden!important;
+      clip:rect(0,0,0,0)!important;
+      white-space:nowrap!important;
+      border:0!important;
+    }
+
+    @media(max-width:900px){
+      .slide{padding-inline:28px}
+      .air-grid,.water-grid,.solar-grid,.green-grid,.thank-grid{
+        grid-template-columns:1fr;
+        overflow:auto;
+      }
+      .aqi{min-height:260px}
+      .icon-grid,.waste-grid{grid-template-columns:1fr}
+      .icon-card,.waste-card{min-height:220px}
+      .hero{width:65%;height:34%}
+    }
+
+    @media(max-width:600px){
+      :root{--footer:62px}
+      .title{font-size:clamp(20px,6vw,32px)}
+      .subtitle{font-size:10px}
+      .slide{padding:18px 16px var(--footer);overflow:auto}
+      .weather-grid{grid-template-columns:1fr}
+      .table-head,.table-row{grid-template-columns:1.2fr .8fr .75fr}
+      .reading{font-size:30px}
+      .data-status{top:8px;right:8px;max-width:65vw}
+      .status-banner{top:55px}
+      .footer{padding:0 46px;font-size:8px}
+      .dots{bottom:calc(var(--footer) + 6px)}
+      .nav{width:42px;height:62px}
+    }
+
+    @media(prefers-reduced-motion:reduce){
+      *,*::before,*::after{
+        animation-duration:.01ms!important;
+        transition-duration:.01ms!important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+<main class="app" aria-label="Ramoji Film City environmental sustainability presentation">
+  <section class="screen" id="screen" aria-roledescription="slideshow">
+
+    <div class="data-status loading" id="dataStatus" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="dataStatusText">CONNECTING TO FIREBASE</span>
+    </div>
+
+    <div class="status-banner" id="statusBanner" role="status" aria-live="polite"></div>
+
+    <div class="slides" id="slideContent">
+
+      <!-- 0: Cover -->
+      <section class="slide cover active" data-slide="0" aria-label="Experience Nature at Its Best">
+        <h1 class="title">Experience Nature at Its Best</h1>
+        <div class="rule" aria-hidden="true"></div>
+        <img class="hero" src="rfc1.jpeg" alt="Ramoji Film City">
+        <p class="cover-copy">
+          A vibrant green environment sustained through<br>
+          responsible conservation and resource management.
+        </p>
+        <div class="footer">Clean Environment • Responsible Operations • Sustainable Future</div>
+      </section>
+
+      <!-- 1: Air Quality -->
+      <section class="slide" data-slide="1" aria-label="Ramoji Film City Air Quality">
+        <h1 class="title">Ramoji Film City Air Quality</h1>
+        <div class="rule" aria-hidden="true"></div>
+
+        <div class="air-grid">
+          <div class="card aqi">
+            <svg class="aqi-icon" viewBox="0 0 220 180" aria-hidden="true">
+              <defs>
+                <linearGradient id="aqiGradient" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#35b96f"/>
+                  <stop offset=".55" stop-color="#7dca67"/>
+                  <stop offset="1" stop-color="#e5bf4c"/>
+                </linearGradient>
+              </defs>
+              <rect x="12" y="12" width="196" height="156" rx="34" fill="#fff" stroke="#d8ebe0" stroke-width="3"/>
+              <path d="M58 106a56 56 0 0 1 104 0" fill="none" stroke="#dfe9e3" stroke-width="18" stroke-linecap="round"/>
+              <path d="M58 106a56 56 0 0 1 104 0" fill="none" stroke="url(#aqiGradient)" stroke-width="18" stroke-linecap="round"/>
+              <circle cx="110" cy="106" r="9" fill="#075f35"/>
+              <path d="M110 106 137 73" stroke="#075f35" stroke-width="7" stroke-linecap="round"/>
+            </svg>
+            <div class="eyebrow">Air Quality Index</div>
+            <div class="big-number" data-bind="aqi">—</div>
+            <div class="pill" data-bind="aqiStatus">UNAVAILABLE</div>
+          </div>
+
+          <div class="card metric-table">
+            <div class="table-head">
+              <span>PARAMETER</span><span>CURRENT RFC</span><span>UNIT</span>
+            </div>
+            <div class="table-row">
+              <div class="parameter">PM2.5</div>
+              <div class="reading" data-bind="pm25">—</div>
+              <div class="reading">µg/m³</div>
+            </div>
+            <div class="table-row">
+              <div class="parameter">PM10</div>
+              <div class="reading" data-bind="pm10">—</div>
+              <div class="reading">µg/m³</div>
+            </div>
+            <div class="table-row">
+              <div class="parameter">Air Quality</div>
+              <div class="reading" data-bind="aqiTable">—</div>
+              <div class="reading">AQI</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">Clean Environment • Responsible Operations • Sustainable Future</div>
+      </section>
+
+      <!-- 2: Live Sensors -->
+      <section class="slide" data-slide="2" aria-label="Live Environmental Sensors">
+        <h1 class="title">Live Environmental Sensors</h1>
+        <p class="subtitle">Real-Time Environmental Monitoring</p>
+        <div class="rule" aria-hidden="true"></div>
+
+        <div class="weather-grid">
+          <div class="card weather-card">
+            <div class="weather-label">Temperature</div>
+            <div class="weather-value"><span data-bind="temperature">—</span></div>
+            <div class="status-pill" data-bind="temperatureStatus">WAITING</div>
+          </div>
+          <div class="card weather-card">
+            <div class="weather-label">Humidity</div>
+            <div class="weather-value"><span data-bind="humidity">—</span></div>
+            <div class="status-pill" data-bind="humidityStatus">WAITING</div>
+          </div>
+        </div>
+
+        <div class="footer">Clean Environment • Responsible Operations • Sustainable Future</div>
+      </section>
+
+      <!-- 3: Water Quality -->
+      <section class="slide" data-slide="3" aria-label="Ramoji Film City Water Quality">
+        <h1 class="title">Ramoji Film City Water Quality</h1>
+        <div class="rule" aria-hidden="true"></div>
+
+        <div class="water-grid">
+          <div class="card drop-panel">
+            <svg class="drop-svg" viewBox="0 0 120 170" aria-hidden="true">
+              <path d="M60 3C43 34 17 66 17 106c0 32 19 58 43 58s43-26 43-58C103 66 77 34 60 3z" fill="#73b7dc"/>
+              <path d="M44 118c7 11 18 15 30 11" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="7"/>
+            </svg>
+            <div class="drop-caption">Quality Monitored</div>
+          </div>
+
+          <div class="card water-table">
+            <div class="table-head">
+              <span>PARAMETER</span>
+              <span>CURRENT RFC<br>READING</span>
+              <span>BIS ACCEPTABLE<br>LIMIT</span>
+            </div>
+            <div class="table-row">
+              <div class="parameter">pH Level</div>
+              <div class="reading" data-bind="ph">—</div>
+              <div class="reading">6.5–8.5</div>
+            </div>
+            <div class="table-row">
+              <div class="parameter">Water TDS</div>
+              <div class="reading" data-bind="tds">—</div>
+              <div class="reading">500<span class="unit">mg/L</span></div>
+            </div>
+            <div class="table-row">
+              <div class="parameter">Estimated Hardness</div>
+              <div class="reading" data-bind="hardness">—</div>
+              <div class="reading">200<span class="unit">mg/L</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">Clean Environment • Responsible Operations • Sustainable Future</div>
+      </section>
+
+      <!-- 4: Water Conservation -->
+      <section class="slide" data-slide="4" aria-label="Water Conservation at Ramoji Film City">
+        <h1 class="title">Water Conservation at Ramoji Film City</h1>
+        <p class="subtitle">Towards Zero Water Wastage</p>
+        <div class="rule" aria-hidden="true"></div>
+
+        <div class="icon-grid">
+          <article class="card icon-card">
+            <svg class="icon-graphic" viewBox="0 0 120 150" aria-hidden="true">
+              <path d="M60 4C40 39 17 67 17 103a43 43 0 0 0 86 0C103 67 80 39 60 4z" fill="#74b8dc"/>
+              <path d="M38 92a26 26 0 0 1 41-15" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="7"/>
+              <path d="m77 65 4 16-17-3" fill="#fff"/>
+            </svg>
+            <div class="icon-title">Treated Water<br>Reuse</div>
+            <div class="icon-desc">Used for landscaping</div>
+          </article>
+
+          <article class="card icon-card">
+            <svg class="icon-graphic" viewBox="0 0 150 140" aria-hidden="true">
+              <path d="M35 66c-15 0-25-10-25-23 0-14 12-25 28-25 7-12 20-18 35-18 22 0 40 13 44 31 14 1 24 11 24 24 0 14-12 25-27 25H35z" fill="#dceee2"/>
+              <path d="M53 67v36M75 67v36M97 67v36" stroke="#4dae67" stroke-width="7" stroke-linecap="round"/>
+              <path d="M42 106h68" stroke="#126b3a" stroke-width="8" stroke-linecap="round"/>
+            </svg>
+            <div class="icon-title">Rainwater<br>Harvesting</div>
+            <div class="icon-desc">Capturing and recharging water</div>
+          </article>
+
+          <article class="card icon-card">
+            <svg class="icon-graphic" viewBox="0 0 150 140" aria-hidden="true">
+              <circle cx="75" cy="75" r="49" fill="#eaf7ef" stroke="#4dae67" stroke-width="5"/>
+              <circle cx="75" cy="75" r="10" fill="#4dae67"/>
+              <path d="M75 34V16M40 95l-17 10m87-10 17 10" stroke="#4dae67" stroke-width="5" stroke-linecap="round"/>
+              <circle cx="75" cy="15" r="9" fill="#4dae67"/>
+              <circle cx="23" cy="106" r="9" fill="#4dae67"/>
+              <circle cx="127" cy="106" r="9" fill="#4dae67"/>
+              <path d="M75 75 43 94m32-19 32 19m-32-19V42" stroke="#4dae67" stroke-width="6"/>
+            </svg>
+            <div class="icon-title">Centralised Water<br>Monitoring</div>
+            <div class="icon-desc">Borewells, pumps and sumps</div>
+          </article>
+        </div>
+
+        <div class="footer">Clean Environment • Responsible Operations • Sustainable Future</div>
+      </section>
+
+      <!-- 5: Solar -->
+      <section class="slide" data-slide="5" aria-label="Clean Energy at Ramoji Film City">
+        <h1 class="title">Clean Energy at Ramoji Film City</h1>
+        <p class="subtitle">Rooftop Solar Power Generation</p>
+        <div class="rule" aria-hidden="true"></div>
+
+        <div class="solar-grid">
+          <div class="card art-panel">
+            <svg viewBox="0 0 220 210" aria-hidden="true">
+              <circle cx="78" cy="57" fill="#f8c23b" r="28"/>
+              <g stroke="#f8c23b" stroke-linecap="round" stroke-width="6">
+                <path d="M78 13V0M78 114v-13M34 57H20m116 0h-14M47 26 37 16m82 82-10-10M47 92 37 98m82-82-10 10"/>
+              </g>
+              <path d="m36 113 118 0 23 73H15z" fill="#2f69a3" stroke="#174c7f" stroke-width="3"/>
+              <g stroke="#87b8e2" stroke-width="3">
+                <path d="M43 113 31 186M70 113 63 186M99 113l-1 73M128 113l5 73M154 113l17 73M25 139h137M20 163h149"/>
+              </g>
+            </svg>
+          </div>
+
+          <div class="card two-metrics">
+            <div>
+              <div class="metric-label">Current Solar Output</div>
+              <div class="dash" data-bind="solarToday">--</div>
+              <div class="metric-label">kW</div>
+            </div>
+            <div>
+              <div class="metric-label">Energy Generated<br>Today</div>
+              <div class="dash" data-bind="solarMonth">--</div>
+              <div class="metric-label">kWh</div>
+            </div>
+            <div class="soft-band">
+              CO₂ Emissions Avoided Today
+              <strong data-bind="co2">--</strong>
+              <div class="metric-label">Tonnes</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">Clean Environment • Responsible Operations • Sustainable Future</div>
+      </section>
+
+      <!-- 6: Green -->
+      <section class="slide" data-slide="6" aria-label="Green Landscapes at Ramoji Film City">
+        <h1 class="title">Green Landscapes at Ramoji Film City</h1>
+        <p class="subtitle">Nurturing Nature Across RFC</p>
+        <div class="rule" aria-hidden="true"></div>
+
+        <div class="green-grid">
+          <div class="card art-panel">
+            <svg viewBox="0 0 220 210" aria-hidden="true">
+              <ellipse cx="110" cy="188" fill="#7fcf73" rx="86" ry="13"/>
+              <circle cx="69" cy="103" fill="#59b768" r="42"/>
+              <circle cx="146" cy="104" fill="#58b66a" r="42"/>
+              <circle cx="109" cy="59" fill="#8ad17d" r="48"/>
+              <path d="M93 86h34l18 99H74z" fill="#9a5d36"/>
+              <path d="M106 92 83 67m28 24 28-29" stroke="#835033" stroke-linecap="round" stroke-width="10"/>
+              <circle cx="43" cy="133" r="12" fill="#f8ca3c"/>
+              <circle cx="166" cy="181" r="6" fill="#f29083"/>
+              <circle cx="181" cy="179" r="5" fill="#f8ca3c"/>
+            </svg>
+          </div>
+
+          <div class="card two-metrics">
+            <div>
+              <div class="metric-label">Trees and Palms</div>
+              <div class="dash" data-bind="trees">--</div>
+              <div class="metric-label">Nos.</div>
+            </div>
+            <div>
+              <div class="metric-label">Landscaped<br>Green Area</div>
+              <div class="dash" data-bind="greenArea">--</div>
+              <div class="metric-label">acres</div>
+            </div>
+            <div class="soft-band">
+              New Plantation This Year
+              <strong data-bind="newTrees">--</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">Clean Environment • Responsible Operations • Sustainable Future</div>
+      </section>
+
+      <!-- 7: Waste -->
+      <section class="slide" data-slide="7" aria-label="Responsible Waste Management at RFC">
+        <h1 class="title">Responsible Waste Management at RFC</h1>
+        <p class="subtitle">Segregate • Recover • Recycle</p>
+        <div class="rule" aria-hidden="true"></div>
+
+        <div class="waste-grid">
+          <article class="card waste-card">
+            <svg class="waste-icon" viewBox="0 0 180 180" aria-hidden="true">
+              <rect x="48" y="50" width="84" height="105" rx="12" fill="#20a95d"/>
+              <rect x="42" y="40" width="96" height="15" rx="7" fill="#08783d"/>
+              <path d="M67 31h46" stroke="#08783d" stroke-width="10" stroke-linecap="round"/>
+              <path d="M68 80c15-20 35-20 48 0-14 17-34 18-48 0Z" fill="#8ad17d"/>
+              <path d="M90 71v32" stroke="#126b3a" stroke-width="6" stroke-linecap="round"/>
+            </svg>
+            <div class="waste-title">Organic Waste</div>
+            <div class="waste-action">Compost</div>
+            <div class="waste-desc">Convert biodegradable waste into useful compost.</div>
+          </article>
+
+          <article class="card waste-card">
+            <svg class="waste-icon" viewBox="0 0 180 180" aria-hidden="true">
+              <rect x="50" y="45" width="80" height="110" rx="12" fill="#4e9bc7"/>
+              <rect x="44" y="36" width="92" height="14" rx="7" fill="#286b93"/>
+              <path d="M70 28h40" stroke="#286b93" stroke-width="10" stroke-linecap="round"/>
+              <path d="M75 84l15-27 15 27h-11v26H86V84z" fill="#fff"/>
+            </svg>
+            <div class="waste-title">Recyclable Waste</div>
+            <div class="waste-action">Recover & Recycle</div>
+            <div class="waste-desc">Segregate paper, plastic, metal and other recoverable material.</div>
+          </article>
+
+          <article class="card waste-card">
+            <svg class="waste-icon" viewBox="0 0 180 180" aria-hidden="true">
+              <rect x="48" y="48" width="84" height="107" rx="12" fill="#87958e"/>
+              <rect x="42" y="38" width="96" height="15" rx="7" fill="#52615a"/>
+              <path d="M68 30h44" stroke="#52615a" stroke-width="10" stroke-linecap="round"/>
+              <circle cx="90" cy="94" r="27" fill="#f3f7f4"/>
+              <path d="M77 94h26M90 81v26" stroke="#52615a" stroke-width="7" stroke-linecap="round"/>
+            </svg>
+            <div class="waste-title">Reject Waste</div>
+            <div class="waste-action">Responsible Disposal</div>
+            <div class="waste-desc">Handle non-recoverable waste through approved disposal channels.</div>
+          </article>
+        </div>
+
+        <div class="footer">Clean Environment • Responsible Operations • Sustainable Future</div>
+      </section>
+
+      <!-- 8: Thank You -->
+      <section class="slide" data-slide="8" aria-label="Thank You">
+        <h1 class="title">Thank You</h1>
+        <div class="rule" aria-hidden="true"></div>
+
+        <div class="thank-grid">
+          <div class="card people-art">
+            <svg aria-hidden="true" viewbox="0 0 220 220">
+              <circle cx="110" cy="82" fill="#e4f2e8" r="62">
+              </circle>
+              <path d="M110 24c-16 28-19 58-6 91 14-28 17-59 6-91z" fill="#4daf67">
+              </path>
+              <path d="M110 24c17 28 20 58 7 91-15-28-18-59-7-91z" fill="#7dcc80">
+              </path>
+              <circle cx="78" cy="142" fill="#fac39f" r="20">
+              </circle>
+              <circle cx="110" cy="130" fill="#f4b789" r="22">
+              </circle>
+              <circle cx="144" cy="143" fill="#f7b595" r="20">
+              </circle>
+              <path d="M48 196c0-31 13-48 30-48s30 17 30 48z" fill="#3f78b8">
+              </path>
+              <path d="M76 201c0-40 15-61 34-61s34 21 34 61z" fill="#4ead67">
+              </path>
+              <path d="M116 197c0-31 12-48 28-48s29 17 29 48z" fill="#ef806f">
+              </path>
+            </svg>
+          </div>
+
+          <div class="card thanks-copy">
+            <p class="green">WISHING YOU PLEASANT MEMORIES OF RFC</p>
+            <h2>Let's protect the environment together</h2>
+            <p>Clean Environment • Responsible Operations • Sustainable Future</p>
+          </div>
+        </div>
+
+        <div class="footer">Clean Environment • Responsible Operations • Sustainable Future</div>
+      </section>
+
+    </div>
+
+    <div class="controls">
+      <button class="nav prev" id="prevButton" type="button" aria-label="Previous slide">‹</button>
+      <button class="nav next" id="nextButton" type="button" aria-label="Next slide">›</button>
+      <div class="dots" id="dots" aria-label="Slide navigation"></div>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay" role="status" aria-live="polite">
+      <div class="overlay-card">
+        <div class="loader" aria-hidden="true"></div>
+        <h2 id="loadingTitle">Connecting to Firebase</h2>
+        <p id="loadingMessage">Waiting for the first valid ESP32 environmental snapshot.</p>
+      </div>
+    </div>
+
+    <div class="fatal-overlay" id="fatalOverlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="fatalTitle">
+      <div class="overlay-card">
+        <h2 id="fatalTitle">Display unavailable</h2>
+        <p id="fatalMessage"></p>
+        <button class="action-button" id="retryButton" type="button">Retry</button>
+      </div>
+    </div>
+
+    <aside class="diagnostics" id="diagnostics" hidden aria-label="Display diagnostics"></aside>
+  </section>
+
+  <p class="sr-only">
+    Use the left and right arrow keys to change slides. P pauses. F toggles fullscreen. D toggles diagnostics.
+  </p>
+</main>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+  import {
+    getDatabase,
+    ref,
+    onValue
+  } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+
+  (() => {
+    "use strict";
+
+    const APP_VERSION = "7.0.0-FIREBASE-PRODUCTION";
+
+    /*
+      Firebase Web configuration from the supplied project.
+      These values are client-side identifiers; database access must still
+      be controlled by Realtime Database Security Rules.
+    */
+    const FIREBASE_CONFIG = Object.freeze({
+      apiKey: "AIzaSyDPyojhuYs6UjanLFD218PpMOD5CHK4g3Q",
+      authDomain: "rfc-environmental-dashboard.firebaseapp.com",
+      databaseURL: "https://rfc-environmental-dashboard-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "rfc-environmental-dashboard",
+      storageBucket: "rfc-environmental-dashboard.firebasestorage.app",
+      messagingSenderId: "462991862770",
+      appId: "1:462991862770:web:9c5d07ed9ff472bbd7d96b"
+    });
+
+    const CONFIG = Object.freeze({
+      firebaseDevicePath: "devices/rfc-environment-001/latest",
+
+      /* ESP32 publishes approximately every 60 seconds. */
+      staleAfterMs: 5 * 60 * 1000,
+
+      /* Re-check freshness even if Firebase emits no new event. */
+      staleCheckMs: 15 * 1000,
+
+      /* Browser cache for the last valid snapshot. */
+      cacheKey: "rfc_environment_last_valid_snapshot_v1",
+
+      /* Maximum accepted Firebase payload size. */
+      maxSlides: 12,
+      maxRowsPerSlide: 30,
+
+      /* Slideshow. */
+      slideIntervalMs: 6500,
+
+      /* User interaction. */
+      keyboardControlsEnabled: true,
+
+      /* Maximum timestamp skew accepted into the future. */
+      futureToleranceMs: 10 * 60 * 1000,
+
+      /* Show a banner for this duration. */
+      bannerMs: 3200
+    });
+
+    const els = {
+      screen: document.getElementById("screen"),
+      slideContent: document.getElementById("slideContent"),
+      slides: Array.from(document.querySelectorAll(".slide")),
+      dots: document.getElementById("dots"),
+
+      prevButton: document.getElementById("prevButton"),
+      nextButton: document.getElementById("nextButton"),
+
+      loadingOverlay: document.getElementById("loadingOverlay"),
+      loadingTitle: document.getElementById("loadingTitle"),
+      loadingMessage: document.getElementById("loadingMessage"),
+
+      fatalOverlay: document.getElementById("fatalOverlay"),
+      fatalMessage: document.getElementById("fatalMessage"),
+      retryButton: document.getElementById("retryButton"),
+
+      statusBanner: document.getElementById("statusBanner"),
+
+      dataStatus: document.getElementById("dataStatus"),
+      dataStatusText: document.getElementById("dataStatusText"),
+
+      diagnostics: document.getElementById("diagnostics")
+    };
+
+    const state = {
+      currentSlide: 0,
+      paused: false,
+      slideTimer: null,
+
+      firebaseApp: null,
+      firebaseDatabase: null,
+      firebaseUnsubscribe: null,
+      staleTimer: null,
+
+      firebaseConnected: false,
+
+      connectionState: "connecting",
+      dataState: "none",
+
+      lastPayload: null,
+      lastDataUpdate: null,
+      lastFirebaseEventAt: null,
+
+      lastError: null,
+      cachedAt: null,
+
+      bannerTimer: null
+    };
+
+    /* ------------------------------------------------------------------ */
+    /* Utilities                                                          */
+    /* ------------------------------------------------------------------ */
+
+    function sanitize(value, fallback = "") {
+      if (value === null || value === undefined) {
+        return fallback;
+      }
+
+      const text = String(value).trim();
+
+      return text || fallback;
+    }
+
+    function parseTimestamp(value) {
+      if (value instanceof Date && Number.isFinite(value.getTime())) {
+        return new Date(value.getTime());
+      }
+
+      if (typeof value !== "string" && typeof value !== "number") {
+        return null;
+      }
+
+      const raw = String(value).trim();
+
+      if (!raw) {
+        return null;
+      }
+
+      /*
+        Firebase/ESP32 timestamps can arrive as:
+          2026-08-14T18:33:04
+          2026-08-14T18:33:04Z
+          2026-08-14 18:33:04
+      */
+
+      let normalized = raw;
+
+      if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/.test(normalized)) {
+        normalized = normalized.replace(" ", "T");
+      }
+
+      const parsed = new Date(normalized);
+
+      if (!Number.isFinite(parsed.getTime())) {
+        return null;
+      }
+
+      return parsed;
+    }
+
+    function numeric(value, fallback = "—") {
+      const text = sanitize(value, "");
+
+      const match = text.match(/-?\d+(?:[.,]\d+)?/);
+
+      if (!match) {
+        return fallback;
+      }
+
+      return match[0].replace(",", ".");
+    }
+
+    function metric(map, names, fallback = "—") {
+      for (const name of names) {
+        const key = name.toLowerCase();
+        const value = map.get(key);
+
+        if (value !== undefined && value !== null && value !== "") {
+          return value;
+        }
+      }
+
+      return fallback;
+    }
+
+    function ageMs(date) {
+      if (!(date instanceof Date)) {
+        return Infinity;
+      }
+
+      return Date.now() - date.getTime();
+    }
+
+    function isFresh(date) {
+      const age = ageMs(date);
+
+      return (
+        age >= 0 &&
+        age <= CONFIG.staleAfterMs
+      );
+    }
+
+    function formatDateTime(date) {
+      if (!(date instanceof Date) || !Number.isFinite(date.getTime())) {
+        return "Unknown";
+      }
+
+      return new Intl.DateTimeFormat(undefined, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      }).format(date);
+    }
+
+    function formatAge(date) {
+      if (!(date instanceof Date) || !Number.isFinite(date.getTime())) {
+        return "unknown age";
+      }
+
+      const age = Math.max(0, Date.now() - date.getTime());
+
+      const seconds = Math.floor(age / 1000);
+
+      if (seconds < 60) {
+        return `${seconds}s ago`;
+      }
+
+      const minutes = Math.floor(seconds / 60);
+
+      if (minutes < 60) {
+        return `${minutes}m ${seconds % 60}s ago`;
+      }
+
+      const hours = Math.floor(minutes / 60);
+
+      return `${hours}h ${minutes % 60}m ago`;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Firebase payload validation                                        */
+    /* ------------------------------------------------------------------ */
+
+    function normalizePayload(raw) {
+      if (!raw || typeof raw !== "object") {
+        throw new TypeError(
+          "Firebase snapshot is empty or not an object."
+        );
+      }
+
+      if (!Array.isArray(raw.slides)) {
+        throw new TypeError(
+          "Firebase snapshot must contain a slides array."
+        );
+      }
+
+      const updatedAt = parseTimestamp(raw.updatedAt);
+
+      if (!updatedAt) {
+        throw new TypeError(
+          "Firebase snapshot must contain a valid updatedAt timestamp."
+        );
+      }
+
+      const age = ageMs(updatedAt);
+
+      if (age < -CONFIG.futureToleranceMs) {
+        throw new TypeError(
+          "Firebase snapshot timestamp is too far in the future."
+        );
+      }
+
+      const slides = raw.slides
+        .slice(0, CONFIG.maxSlides)
+        .map((slide) => ({
+          title: sanitize(slide?.title, ""),
+          rows: Array.isArray(slide?.rows)
+            ? slide.rows
+                .slice(0, CONFIG.maxRowsPerSlide)
+                .map((row) => ({
+                  label: sanitize(row?.label, ""),
+                  value: sanitize(row?.value, "—")
+                }))
+                .filter((row) => row.label)
+            : []
+        }))
+        .filter((slide) => slide.title || slide.rows.length);
+
+      if (!slides.length) {
+        throw new TypeError(
+          "Firebase snapshot contains no dashboard slides."
+        );
+      }
+
+      return {
+        updatedAt,
+        slides
+      };
+    }
+
+    function flattenMetrics(payload) {
+      const map = new Map();
+
+      for (const slide of payload.slides) {
+        for (const row of slide.rows) {
+          if (row.label) {
+            map.set(
+              row.label.toLowerCase(),
+              row.value
+            );
+          }
+        }
+      }
+
+      return map;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Local persistent cache                                             */
+    /* ------------------------------------------------------------------ */
+
+    function serializePayload(payload) {
+      return {
+        updatedAt: payload.updatedAt.toISOString(),
+        slides: payload.slides
+      };
+    }
+
+    function saveCache(payload) {
+      try {
+        localStorage.setItem(
+          CONFIG.cacheKey,
+          JSON.stringify(serializePayload(payload))
+        );
+
+        state.cachedAt = new Date();
+      } catch (error) {
+        /*
+          localStorage may be unavailable in private/restricted browser
+          contexts. This must never stop the live Firebase dashboard.
+        */
+
+        state.lastError = error;
+      }
+    }
+
+    function loadCache() {
+      try {
+        const raw = localStorage.getItem(CONFIG.cacheKey);
+
+        if (!raw) {
+          return null;
+        }
+
+        const parsed = JSON.parse(raw);
+
+        const payload = normalizePayload(parsed);
+
+        return payload;
+
+      } catch {
+        return null;
+      }
+    }
+
+    function clearCache() {
+      try {
+        localStorage.removeItem(CONFIG.cacheKey);
+      } catch {}
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Display binding                                                     */
+    /* ------------------------------------------------------------------ */
+
+    function setBind(name, value) {
+      document
+        .querySelectorAll(`[data-bind="${name}"]`)
+        .forEach((element) => {
+          element.textContent = sanitize(value, "—");
+        });
+    }
+
+    function deriveTemperatureStatus(value) {
+      const number = parseFloat(
+        String(value).replace(/[^\d.+-]/g, "")
+      );
+
+      if (!Number.isFinite(number)) {
+        return "WAITING";
+      }
+
+      if (number >= 20 && number <= 32) {
+        return "PLEASANT";
+      }
+
+      if (number < 20) {
+        return "COOL";
+      }
+
+      return "WARM";
+    }
+
+    function deriveHumidityStatus(value) {
+      const number = parseFloat(
+        String(value).replace(/[^\d.+-]/g, "")
+      );
+
+      if (!Number.isFinite(number)) {
+        return "WAITING";
+      }
+
+      if (number >= 40 && number <= 70) {
+        return "COMFORTABLE";
+      }
+
+      if (number < 40) {
+        return "DRY";
+      }
+
+      return "HUMID";
+    }
+
+    function bind(payload) {
+      const metrics = flattenMetrics(payload);
+
+      const airQuality = metric(
+        metrics,
+        ["Air Quality"],
+        "UNAVAILABLE"
+      );
+
+      const pm25 = metric(
+        metrics,
+        ["PM2.5", "PM₂.₅"],
+        "—"
+      );
+
+      const pm10 = metric(
+        metrics,
+        ["PM10", "PM₁₀"],
+        "—"
+      );
+
+      const temperature = metric(
+        metrics,
+        ["Temperature"],
+        "—"
+      );
+
+      const humidity = metric(
+        metrics,
+        ["Humidity"],
+        "—"
+      );
+
+      const tds = metric(
+        metrics,
+        ["Water TDS", "TDS"],
+        "—"
+      );
+
+      const ph = metric(
+        metrics,
+        ["pH Level", "PH Level"],
+        "—"
+      );
+
+      const hardness = metric(
+          metrics,
+          ["Estimated Hardness", "Total Hardness"],
+          "—"
+      );
+
+      const solarToday = metric(
+        metrics,
+        ["Solar Today", "Current Solar Output"],
+        "—"
+      );
+
+      const solarMonth = metric(
+        metrics,
+        ["Energy Generated Today", "This Month"],
+        "—"
+      );
+
+      const co2 = metric(
+        metrics,
+        ["CO₂ Saved", "CO2 Saved"],
+        "—"
+      );
+
+      const trees = metric(
+        metrics,
+        ["Trees", "Trees and Palms"],
+        "—"
+      );
+
+      const greenArea = metric(
+        metrics,
+        ["Green Area", "Landscaped Green Area"],
+        "—"
+      );
+
+      const newTrees = metric(
+        metrics,
+        ["New Trees", "New Plantation This Year"],
+        "—"
+      );
+
+      setBind("aqi", numeric(airQuality));
+      setBind(
+        "aqiTable",
+        numeric(airQuality)
+      );
+
+      setBind(
+        "aqiStatus",
+        airQuality
+          .replace(/\([^)]*\)/g, "")
+          .trim() || "UNAVAILABLE"
+      );
+
+      setBind("pm25", numeric(pm25));
+      setBind("pm10", numeric(pm10));
+
+      /*
+        Preserve the ESP32 unit text where useful, but avoid repeated
+        whitespace in the large display.
+      */
+      setBind(
+        "temperature",
+        sanitize(temperature, "—").replace(/\s+/g, " ")
+      );
+
+      setBind(
+        "humidity",
+        sanitize(humidity, "—").replace(/\s+/g, " ")
+      );
+
+      setBind("tds", numeric(tds));
+      setBind("ph", numeric(ph));
+      setBind("hardness", numeric(hardness));
+
+      setBind("solarToday", "3,420");
+      setBind("solarMonth", "86,400");
+
+      setBind("co2", "2.8");
+      setBind("trees", "45,280");
+
+      setBind("greenArea", "320");
+      setBind("newTrees", "1,250");
+
+      setBind(
+        "temperatureStatus",
+        deriveTemperatureStatus(temperature)
+      );
+
+      setBind(
+        "humidityStatus",
+        deriveHumidityStatus(humidity)
+      );
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Data state UI                                                       */
+    /* ------------------------------------------------------------------ */
+
+    function updateDataStatus(mode, text) {
+      els.dataStatus.className = `data-status ${mode}`;
+      els.dataStatusText.textContent = text;
+    }
+
+    function updateLiveStatus() {
+      const date = state.lastDataUpdate;
+
+      if (state.dataState === "live") {
+        updateDataStatus(
+          "live",
+          `LIVE • Updated ${formatDateTime(date)}`
+        );
+        return;
+      }
+
+      if (state.dataState === "cached") {
+        updateDataStatus(
+          "cached",
+          `CACHED • ${formatAge(date)} • Checking Firebase`
+        );
+        return;
+      }
+
+      if (state.dataState === "stale") {
+        updateDataStatus(
+          "stale",
+          `PREVIOUS DATA • Updated ${formatDateTime(date)}`
+        );
+        return;
+      }
+
+      if (state.dataState === "offline") {
+        updateDataStatus(
+          "offline",
+          "FIREBASE OFFLINE • Previous data retained"
+        );
+        return;
+      }
+
+      updateDataStatus(
+        "loading",
+        "CONNECTING TO FIREBASE"
+      );
+    }
+
+    function banner(message) {
+      els.statusBanner.textContent =
+        sanitize(message, "Display status updated.");
+
+      els.statusBanner.classList.add("show");
+
+      clearTimeout(state.bannerTimer);
+
+      state.bannerTimer = setTimeout(() => {
+        els.statusBanner.classList.remove("show");
+      }, CONFIG.bannerMs);
+    }
+
+    function setLoading(isLoading, title, message) {
+      if (title) {
+        els.loadingTitle.textContent = title;
+      }
+
+      if (message) {
+        els.loadingMessage.textContent = message;
+      }
+
+      els.loadingOverlay.hidden = !isLoading;
+      els.loadingOverlay.setAttribute(
+        "aria-busy",
+        String(isLoading)
+      );
+    }
+
+    function showFatal(message) {
+      els.fatalMessage.textContent =
+        sanitize(
+          message,
+          "The dashboard could not be initialized."
+        );
+
+      els.fatalOverlay.hidden = false;
+    }
+
+    function hideFatal() {
+      els.fatalOverlay.hidden = true;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Slideshow                                                           */
+    /* ------------------------------------------------------------------ */
+
+    function slides() {
+      return els.slides;
+    }
+
+    function buildDots() {
+      els.dots.replaceChildren();
+
+      slides().forEach((slide, index) => {
+        const button = document.createElement("button");
+
+        button.type = "button";
+        button.className = "dot-btn";
+        button.setAttribute(
+          "aria-label",
+          `Go to slide ${index + 1}`
+        );
+
+        button.addEventListener("click", () => {
+          renderSlide(index);
+          restartTimer();
+        });
+
+        els.dots.appendChild(button);
+      });
+    }
+
+    function updateDots() {
+      Array.from(
+        els.dots.querySelectorAll(".dot-btn")
+      ).forEach((button, index) => {
+        const active =
+          index === state.currentSlide;
+
+        button.classList.toggle(
+          "active",
+          active
+        );
+
+        button.setAttribute(
+          "aria-current",
+          active ? "true" : "false"
+        );
+      });
+    }
+
+    function renderSlide(index) {
+      const total = slides().length;
+
+      if (!total) {
+        return;
+      }
+
+      const next =
+        ((index % total) + total) % total;
+
+      slides().forEach((slide, i) => {
+        const active = i === next;
+
+        slide.classList.toggle(
+          "active",
+          active
+        );
+
+        slide.inert = !active;
+        slide.setAttribute(
+          "aria-hidden",
+          String(!active)
+        );
+      });
+
+      state.currentSlide = next;
+
+      updateDots();
+      updateDiagnostics();
+    }
+
+    function nextSlide() {
+      renderSlide(state.currentSlide + 1);
+    }
+
+    function previousSlide() {
+      renderSlide(state.currentSlide - 1);
+    }
+
+    function stopTimer() {
+      if (state.slideTimer !== null) {
+        clearInterval(state.slideTimer);
+        state.slideTimer = null;
+      }
+    }
+
+    function startTimer() {
+      stopTimer();
+
+      if (
+        state.paused ||
+        slides().length < 2
+      ) {
+        return;
+      }
+
+      state.slideTimer = setInterval(() => {
+        if (!document.hidden) {
+          nextSlide();
+        }
+      }, CONFIG.slideIntervalMs);
+    }
+
+    function restartTimer() {
+      if (!state.paused) {
+        startTimer();
+      }
+    }
+
+    function togglePause() {
+      state.paused = !state.paused;
+
+      if (state.paused) {
+        stopTimer();
+        banner("Slideshow paused.");
+      } else {
+        startTimer();
+        banner("Slideshow resumed.");
+      }
+
+      updateDiagnostics();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Firebase lifecycle                                                  */
+    /* ------------------------------------------------------------------ */
+
+    function validateFirebaseConfiguration() {
+      const required = [
+        "apiKey",
+        "authDomain",
+        "databaseURL",
+        "projectId",
+        "messagingSenderId",
+        "appId"
+      ];
+
+      const invalid = required.filter(
+        (key) => {
+          const value =
+            FIREBASE_CONFIG[key];
+
+          return (
+            !value ||
+            value.includes("YOUR_") ||
+            value.includes("YOUR_PROJECT")
+          );
+        }
+      );
+
+      if (invalid.length) {
+        throw new Error(
+          `Firebase configuration is incomplete: ${invalid.join(", ")}`
+        );
+      }
+    }
+
+    function acceptLivePayload(payload) {
+      /*
+        Do not allow an older Firebase snapshot to replace a newer
+        locally stored/current snapshot.
+      */
+      if (
+        state.lastDataUpdate &&
+        payload.updatedAt.getTime() <=
+          state.lastDataUpdate.getTime()
+      ) {
+        /*
+          If the exact same timestamp is received again, it is harmless.
+          We simply keep the current state.
+        */
+        if (
+          payload.updatedAt.getTime() ===
+          state.lastDataUpdate.getTime()
+        ) {
+          state.firebaseConnected = true;
+          state.connectionState = "connected";
+
+          if (
+            state.dataState !== "live" &&
+            isFresh(payload.updatedAt)
+          ) {
+            state.lastPayload = payload;
+            state.lastDataUpdate = payload.updatedAt;
+            bind(payload);
+            saveCache(payload);
+
+            state.dataState = "live";
+            setLoading(false);
+            hideFatal();
+            updateLiveStatus();
+          }
+
+          return false;
+        }
+
+        return false;
+      }
+
+      state.lastPayload = payload;
+      state.lastDataUpdate = payload.updatedAt;
+      state.lastFirebaseEventAt = new Date();
+
+      state.firebaseConnected = true;
+      state.connectionState = "connected";
+      state.dataState = "live";
+      state.lastError = null;
+
+      bind(payload);
+      saveCache(payload);
+
+      setLoading(false);
+      hideFatal();
+
+      updateLiveStatus();
+
+      banner(
+        `Live Firebase data updated • ${formatDateTime(payload.updatedAt)}`
+      );
+
+      updateDiagnostics();
+
+      return true;
+    }
+
+    function handleFirebaseSnapshot(snapshot) {
+      state.firebaseConnected = true;
+      state.connectionState = "connected";
+      state.lastFirebaseEventAt = new Date();
+
+      const raw = snapshot.val();
+
+      let payload;
+
+      try {
+        payload = normalizePayload(raw);
+      } catch (error) {
+        state.lastError = error;
+
+        /*
+          Invalid Firebase payload must never destroy valid displayed data.
+        */
+        if (state.lastPayload) {
+          setLoading(false);
+
+          state.dataState = isFresh(
+            state.lastDataUpdate
+          )
+            ? "cached"
+            : "stale";
+
+          updateLiveStatus();
+
+          banner(
+            "Previous valid data retained • Firebase snapshot is invalid."
+          );
+        } else {
+          state.dataState = "none";
+
+          setLoading(
+            true,
+            "Waiting for valid data",
+            "Firebase is connected, but the ESP32 snapshot is invalid."
+          );
+
+          updateLiveStatus();
+        }
+
+        updateDiagnostics();
+        return;
+      }
+
+      const age = ageMs(payload.updatedAt);
+
+      /*
+        The Firebase listener can return an old snapshot immediately after
+        page startup. It is still useful as fallback data, but it must not
+        be labelled LIVE.
+      */
+      if (
+        age > CONFIG.staleAfterMs
+      ) {
+        if (
+          !state.lastPayload ||
+          payload.updatedAt.getTime() >
+            state.lastDataUpdate.getTime()
+        ) {
+          state.lastPayload = payload;
+          state.lastDataUpdate = payload.updatedAt;
+
+          /*
+            Cache the structurally valid snapshot so it survives a browser
+            restart. It is explicitly marked stale below.
+          */
+          saveCache(payload);
+          bind(payload);
+        }
+
+        state.dataState = "stale";
+        state.lastError =
+          new Error(
+            `Firebase snapshot is stale (${Math.round(age / 1000)} seconds old).`
+          );
+
+        setLoading(false);
+        hideFatal();
+        updateLiveStatus();
+
+        banner(
+          "Previous data shown • Waiting for a new ESP32 snapshot."
+        );
+
+        updateDiagnostics();
+        return;
+      }
+
+      /*
+        Fresh snapshot.
+      */
+      acceptLivePayload(payload);
+    }
+
+    function handleFirebaseError(error) {
+      state.firebaseConnected = false;
+      state.connectionState = "disconnected";
+      state.lastError = error;
+
+      /*
+        Never clear a valid display because Firebase temporarily
+        disconnects.
+      */
+      if (state.lastPayload) {
+        state.dataState =
+          isFresh(state.lastDataUpdate)
+            ? "cached"
+            : "offline";
+
+        setLoading(false);
+        hideFatal();
+        updateLiveStatus();
+
+        const code = error?.code || "";
+
+        if (
+          code.includes("permission-denied")
+        ) {
+          banner(
+            "Firebase permission denied • Previous data retained."
+          );
+        } else {
+          banner(
+            "Firebase connection unavailable • Previous data retained."
+          );
+        }
+      } else {
+        state.dataState = "none";
+
+        const code = error?.code || "";
+
+        if (
+          code.includes("permission-denied")
+        ) {
+          showFatal(
+            "Firebase permission denied. Check Realtime Database READ rules."
+          );
+        } else {
+          setLoading(
+            true,
+            "Connecting to Firebase",
+            "Waiting for the first valid ESP32 environmental snapshot."
+          );
+
+          updateLiveStatus();
+
+          banner(
+            "Firebase connection unavailable • Waiting for automatic reconnection."
+          );
+        }
+      }
+
+      updateDiagnostics();
+    }
+
+    function subscribeFirebase() {
+      cleanupFirebase();
+
+      validateFirebaseConfiguration();
+
+      if (!state.firebaseApp) {
+        state.firebaseApp =
+          initializeApp(
+            FIREBASE_CONFIG
+          );
+      }
+
+      if (!state.firebaseDatabase) {
+        state.firebaseDatabase =
+          getDatabase(
+            state.firebaseApp
+          );
+      }
+
+      const databaseReference =
+        ref(
+          state.firebaseDatabase,
+          CONFIG.firebaseDevicePath
+        );
+
+      state.connectionState =
+        "connecting";
+
+      updateLiveStatus();
+
+      state.firebaseUnsubscribe =
+        onValue(
+          databaseReference,
+          handleFirebaseSnapshot,
+          handleFirebaseError
+        );
+
+      /*
+        Firebase does not emit an event simply because the timestamp
+        becomes old. This timer handles that case.
+      */
+      state.staleTimer =
+        setInterval(
+          checkFreshness,
+          CONFIG.staleCheckMs
+        );
+    }
+
+    function cleanupFirebase() {
+      if (state.firebaseUnsubscribe) {
+        try {
+          state.firebaseUnsubscribe();
+        } catch {}
+
+        state.firebaseUnsubscribe = null;
+      }
+
+      if (state.staleTimer) {
+        clearInterval(
+          state.staleTimer
+        );
+
+        state.staleTimer = null;
+      }
+    }
+
+    function checkFreshness() {
+      if (!state.lastDataUpdate) {
+        updateLiveStatus();
+        return;
+      }
+
+      const age =
+        ageMs(state.lastDataUpdate);
+
+      if (
+        age <= CONFIG.staleAfterMs
+      ) {
+        if (
+          state.firebaseConnected &&
+          state.dataState !== "live" &&
+          state.lastPayload
+        ) {
+          state.dataState = "live";
+        }
+
+        updateLiveStatus();
+        updateDiagnostics();
+        return;
+      }
+
+      /*
+        Last valid snapshot has become stale.
+        KEEP THE VALUES.
+      */
+      if (
+        state.dataState === "stale" ||
+        state.dataState === "offline"
+      ) {
+        updateLiveStatus();
+        updateDiagnostics();
+        return;
+      }
+
+      state.dataState =
+        state.firebaseConnected
+          ? "stale"
+          : "offline";
+
+      state.lastError =
+        new Error(
+          `Last valid ESP32 snapshot is ${Math.round(age / 1000)} seconds old.`
+        );
+
+      setLoading(false);
+      hideFatal();
+
+      updateLiveStatus();
+
+      banner(
+        state.firebaseConnected
+          ? "Previous data shown • Waiting for a new ESP32 snapshot."
+          : "Previous data shown • Firebase is offline."
+      );
+
+      updateDiagnostics();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Diagnostics                                                         */
+    /* ------------------------------------------------------------------ */
+
+    function updateDiagnostics() {
+      if (els.diagnostics.hidden) {
+        return;
+      }
+
+      const snapshotAge =
+        state.lastDataUpdate
+          ? Math.max(
+              0,
+              Math.round(
+                ageMs(state.lastDataUpdate) /
+                  1000
+              )
+            )
+          : null;
+
+      els.diagnostics.textContent =
+        JSON.stringify(
+          {
+            version: APP_VERSION,
+            firebasePath:
+              CONFIG.firebaseDevicePath,
+
+            slide:
+              state.currentSlide + 1,
+
+            totalSlides:
+              slides().length,
+
+            paused:
+              state.paused,
+
+            connectionState:
+              state.connectionState,
+
+            firebaseConnected:
+              state.firebaseConnected,
+
+            dataState:
+              state.dataState,
+
+            lastDataUpdate:
+              state.lastDataUpdate
+                ? state.lastDataUpdate.toISOString()
+                : null,
+
+            snapshotAgeSeconds:
+              snapshotAge,
+
+            lastFirebaseEventAt:
+              state.lastFirebaseEventAt
+                ? state.lastFirebaseEventAt.toISOString()
+                : null,
+
+            cachedAt:
+              state.cachedAt
+                ? state.cachedAt.toISOString()
+                : null,
+
+            lastError:
+              state.lastError
+                ? String(
+                    state.lastError.message ||
+                    state.lastError
+                  )
+                : null
+          },
+          null,
+          2
+        );
+    }
+
+    function toggleDiagnostics() {
+      els.diagnostics.hidden =
+        !els.diagnostics.hidden;
+
+      updateDiagnostics();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Fullscreen                                                          */
+    /* ------------------------------------------------------------------ */
+
+    async function fullscreen() {
+      try {
+        if (
+          !document.fullscreenElement
+        ) {
+          await els.screen.requestFullscreen?.();
+        } else {
+          await document.exitFullscreen?.();
+        }
+      } catch (error) {
+        state.lastError = error;
+        banner(
+          "Fullscreen is not available in this browser context."
+        );
+      }
+
+      updateDiagnostics();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Restore cached data                                                 */
+    /* ------------------------------------------------------------------ */
+
+    function restoreCachedData() {
+      const cached =
+        loadCache();
+
+      if (!cached) {
+        return false;
+      }
+
+      state.lastPayload = cached;
+      state.lastDataUpdate =
+        cached.updatedAt;
+
+      state.cachedAt =
+        new Date();
+
+      bind(cached);
+
+      /*
+        Cached data is NEVER labelled LIVE until Firebase confirms
+        a fresh snapshot.
+      */
+      state.dataState =
+        isFresh(cached.updatedAt)
+          ? "cached"
+          : "stale";
+
+      setLoading(false);
+      hideFatal();
+      updateLiveStatus();
+
+      banner(
+        isFresh(cached.updatedAt)
+          ? "Previous snapshot restored • Checking Firebase."
+          : "Previous snapshot restored • Data is stale."
+      );
+
+      updateDiagnostics();
+
+      return true;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Events                                                              */
+    /* ------------------------------------------------------------------ */
+
+    els.prevButton.addEventListener(
+      "click",
+      () => {
+        previousSlide();
+        restartTimer();
+      }
+    );
+
+    els.nextButton.addEventListener(
+      "click",
+      () => {
+        nextSlide();
+        restartTimer();
+      }
+    );
+
+    els.retryButton.addEventListener(
+      "click",
+      () => {
+        hideFatal();
+
+        state.connectionState =
+          "connecting";
+
+        if (state.lastPayload) {
+          setLoading(false);
+          banner(
+            "Reconnecting to Firebase • Previous data remains visible."
+          );
+        } else {
+          setLoading(
+            true,
+            "Connecting to Firebase",
+            "Waiting for the first valid ESP32 environmental snapshot."
+          );
+        }
+
+        updateLiveStatus();
+
+        try {
+          subscribeFirebase();
+        } catch (error) {
+          state.connectionState =
+            "error";
+          state.lastError = error;
+
+          if (state.lastPayload) {
+            setLoading(false);
+            state.dataState =
+              isFresh(state.lastDataUpdate)
+                ? "cached"
+                : "offline";
+
+            updateLiveStatus();
+
+            banner(
+              "Firebase reconnect failed • Previous data retained."
+            );
+          } else {
+            showFatal(error.message);
+          }
+
+          updateDiagnostics();
+        }
+      }
+    );
+
+    if (CONFIG.keyboardControlsEnabled) {
+      document.addEventListener(
+        "keydown",
+        (event) => {
+          const key =
+            event.key.toLowerCase();
+
+          if (
+            ["arrowright","pagedown"," "]
+              .includes(key)
+          ) {
+            event.preventDefault();
+            nextSlide();
+            restartTimer();
+          } else if (
+            ["arrowleft","pageup"]
+              .includes(key)
+          ) {
+            event.preventDefault();
+            previousSlide();
+            restartTimer();
+          } else if (
+            key === "p"
+          ) {
+            togglePause();
+          } else if (
+            key === "d"
+          ) {
+            toggleDiagnostics();
+          } else if (
+            key === "f"
+          ) {
+            fullscreen();
+          }
+        }
+      );
+    }
+
+    document.addEventListener(
+      "visibilitychange",
+      () => {
+        if (document.hidden) {
+          stopTimer();
+        } else if (!state.paused) {
+          startTimer();
+          checkFreshness();
+        }
+      }
+    );
+
+    window.addEventListener(
+      "online",
+      () => {
+        state.connectionState =
+          "connecting";
+
+        updateLiveStatus();
+
+        banner(
+          "Network restored • Firebase reconnecting."
+        );
+
+        updateDiagnostics();
+      }
+    );
+
+    window.addEventListener(
+      "offline",
+      () => {
+        state.connectionState =
+          "disconnected";
+
+        if (state.lastPayload) {
+          state.dataState =
+            "offline";
+
+          setLoading(false);
+          updateLiveStatus();
+
+          banner(
+            "Internet unavailable • Previous data retained."
+          );
+        } else {
+          updateLiveStatus();
+        }
+
+        updateDiagnostics();
+      }
+    );
+
+    window.addEventListener(
+      "beforeunload",
+      cleanupFirebase
+    );
+
+    /* ------------------------------------------------------------------ */
+    /* Startup                                                             */
+    /* ------------------------------------------------------------------ */
+
+    function startup() {
+      buildDots();
+      renderSlide(0);
+      startTimer();
+
+      /*
+        Restore previous valid data FIRST.
+        This prevents the dashboard from going blank after a browser/
+        Raspberry Pi restart while Firebase is reconnecting.
+      */
+      restoreCachedData();
+
+      try {
+        validateFirebaseConfiguration();
+        subscribeFirebase();
+      } catch (error) {
+        state.connectionState =
+          "error";
+
+        state.lastError =
+          error;
+
+        if (state.lastPayload) {
+          state.dataState =
+            isFresh(state.lastDataUpdate)
+              ? "cached"
+              : "offline";
+
+          setLoading(false);
+          updateLiveStatus();
+
+          banner(
+            "Firebase initialization failed • Previous data retained."
+          );
+        } else {
+          setLoading(
+            true,
+            "Firebase initialization failed",
+            error.message
+          );
+
+          showFatal(error.message);
+        }
+
+        updateDiagnostics();
+      }
+
+      updateLiveStatus();
+      updateDiagnostics();
+    }
+
+    startup();
+
+  })();
+</script>
+</body>
+</html>
