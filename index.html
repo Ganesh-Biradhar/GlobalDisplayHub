@@ -778,6 +778,165 @@
       .nav{width:42px;height:62px}
     }
 
+    /* ==========================================================
+    LARGE SCREEN / 52-INCH DISPLAY
+    VISUAL ONLY — NO FUNCTIONALITY CHANGES
+    ========================================================== */
+
+    @media (min-width: 1600px) {
+
+        /* =========================
+          PAGE TITLES
+          ========================= */
+
+        .title {
+            font-size: clamp(40px, 3.2vw, 68px) !important;
+        }
+
+        .subtitle {
+            font-size: clamp(16px, 1.35vw, 28px) !important;
+        }
+
+
+        /* =========================
+          CARD TITLES
+          ========================= */
+
+        .icon-title,
+        .waste-title,
+        .waste-action {
+            font-size: clamp(20px, 1.7vw, 34px) !important;
+        }
+
+        .icon-desc,
+        .waste-desc {
+            font-size: clamp(14px, 1.05vw, 22px) !important;
+        }
+
+
+        /* =========================
+          MAIN NUMBERS
+          ========================= */
+
+        .big-number {
+            font-size: clamp(100px, 9vw, 180px) !important;
+        }
+
+        .reading {
+            font-size: clamp(55px, 5vw, 100px) !important;
+        }
+
+        .dash {
+            font-size: clamp(60px, 5.5vw, 110px) !important;
+        }
+
+        .weather-value {
+            font-size: clamp(80px, 7vw, 145px) !important;
+        }
+
+
+        /* =========================
+          PARAMETER / TABLE TEXT
+          ========================= */
+
+        .parameter {
+            font-size: clamp(20px, 1.7vw, 34px) !important;
+        }
+
+        .table-head {
+            font-size: clamp(15px, 1.25vw, 25px) !important;
+        }
+
+        .unit {
+            font-size: .38em !important;
+        }
+
+
+        /* =========================
+          AQI ICON
+          ========================= */
+
+        .aqi-icon {
+            width: clamp(180px, 16vw, 300px) !important;
+        }
+
+
+        /* =========================
+          GENERAL ICONS
+          ========================= */
+
+        .icon-graphic {
+            width: 60% !important;
+            max-height: 60% !important;
+        }
+
+        .waste-card svg {
+            width: 55% !important;
+            height: 55% !important;
+        }
+
+        .drop-svg {
+            width: 65% !important;
+            max-height: 75% !important;
+        }
+
+        .art-panel svg {
+            width: 90% !important;
+            height: 90% !important;
+        }
+
+
+        /* =========================
+          CARDS
+          ========================= */
+
+        .icon-card,
+        .waste-card {
+            padding: 25px !important;
+        }
+
+
+        /* =========================
+          CO₂
+          ========================= */
+
+        .soft-band {
+            font-size: clamp(17px, 1.2vw, 25px) !important;
+        }
+
+        .soft-band strong {
+            font-size: clamp(45px, 4.2vw, 82px) !important;
+        }
+
+
+        /* =========================
+          FOOTER
+          ========================= */
+
+        .footer {
+            font-size: clamp(14px, 1.05vw, 22px) !important;
+        }
+
+
+        /* =========================
+          SPACING
+          ========================= */
+
+        .icon-grid,
+        .waste-grid {
+            gap: 25px !important;
+        }
+
+        .air-grid,
+        .water-grid,
+        .solar-grid,
+        .green-grid,
+        .weather-grid,
+        .thank-grid {
+            gap: 25px !important;
+        }
+    }
+
     @media(prefers-reduced-motion:reduce){
       *,*::before,*::after{
         animation-duration:.01ms!important;
