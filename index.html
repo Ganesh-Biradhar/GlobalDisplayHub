@@ -153,7 +153,7 @@
       background:linear-gradient(180deg,#e6f4eb,#dceee2);
       color:#214d34;
       /*font-size:clamp(9px,.85vw,17px);*/
-      font-size: clamp(24px, 1.6vw, 28px);
+      font-size: clamp(34px, 1.6vw, 52px);
       font-weight:800;
       letter-spacing:.035em;
       text-align:center;
@@ -171,7 +171,7 @@
     }
 
     .hero{
-      width:min(100%,1170px);
+      width:min(90%,1120px);
       height:min(95%,920px);
       min-height:180px;
       margin:clamp(18px,2vh,28px) auto;
@@ -797,8 +797,43 @@
             font-size: clamp(35px, 1.35vw, 52px) !important;
         }
 
-        .footer{
-          font-size: clamp(35px, 1.6vw, 52px);
+        /* ======================================================
+          FOOTER — BIGGER AREA + BIGGER TEXT
+          ====================================================== */
+
+        .footer {
+            height: 120px !important;
+            min-height: 120px !important;
+            flex: 0 0 120px !important;
+
+            padding-left: 70px !important;
+            padding-right: 70px !important;
+
+            font-size: 26px !important;
+            font-weight: 900 !important;
+            line-height: 1.2 !important;
+            letter-spacing: .04em !important;
+
+            display: grid !important;
+            place-items: center !important;
+        }
+
+
+        /* ======================================================
+          FIRST SLIDE ONLY — IMAGE WIDTH
+          ====================================================== */
+
+        .cover .hero {
+            width: 55% !important;
+            height: 45% !important;
+
+            max-width: 900px !important;
+
+            object-fit: cover !important;
+            object-position: center !important;
+
+            margin-left: auto !important;
+            margin-right: auto !important;
         }
 
 
