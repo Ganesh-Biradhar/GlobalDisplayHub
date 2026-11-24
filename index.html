@@ -44,7 +44,7 @@
       --surface-strong:rgba(255,255,255,.96);
       --shadow:0 14px 36px rgba(18,62,39,.11);
       --radius:22px;
-      --footer:72px;
+      --footer:78px;
       --transition:520ms;
     }
 
@@ -816,7 +816,7 @@
             * Gap = 15px
             * Total safe area = 105px
             */
-            padding-bottom: 105px !important;
+            padding-bottom: calc(var(--footer) + 14px) !important;
 
             overflow: hidden !important;
         }
@@ -1083,6 +1083,39 @@
             height: auto !important;
         }
 
+    }
+
+
+    /* FINAL RESPONSIVE OVERRIDES: footer sizing and readable typography */
+    .slide { padding-bottom: calc(var(--footer) + 14px) !important; }
+    .footer {
+      position:absolute; left:0; right:0; bottom:0;
+      height:var(--footer); min-height:var(--footer);
+      display:flex; align-items:center; justify-content:center;
+      padding:7px clamp(48px,5vw,90px);
+      overflow:hidden; font-size:clamp(13px,1.35vw,24px);
+      line-height:1.15; letter-spacing:.025em; font-weight:800;
+      text-align:center; white-space:normal; overflow-wrap:anywhere;
+      text-wrap:balance;
+    }
+    .dots { bottom:calc(var(--footer) + 7px); }
+    .subtitle { font-size:clamp(18px,2vw,32px); line-height:1.12; }
+    .eyebrow,.table-head,.drop-caption,.status-pill { font-size:clamp(14px,1.1vw,19px); }
+    .parameter { font-size:clamp(20px,1.8vw,30px); line-height:1.08; }
+    .icon-desc,.waste-desc { font-size:clamp(15px,1.15vw,22px); }
+    .metric-label { font-size:clamp(16px,1.35vw,25px); line-height:1.15; }
+    .soft-band { font-size:clamp(15px,1.2vw,23px); }
+    @media(max-width:900px) {
+      :root { --footer:72px; }
+      .footer { padding-inline:46px; font-size:clamp(12px,2vw,18px); }
+    }
+    @media(max-width:600px) {
+      :root { --footer:64px; }
+      .footer { padding-inline:42px; font-size:clamp(10px,2.8vw,14px); }
+    }
+    @media(min-width:1600px) {
+      :root { --footer:clamp(76px,8vh,92px); }
+      .footer { font-size:clamp(18px,1.25vw,25px); }
     }
 
     @media(prefers-reduced-motion:reduce){
@@ -1608,48 +1641,52 @@
         return new Date(value.getTime());
       }
 
-      if (typeof value !== "string" && typeof value !== "number") {
-        return null;
+      if (typeof value !== "string" && typeof value !== "number") return null;
+
+      if (typeof value === "number" && Number.isFinite(value)) {
+        const epochMs = value < 100000000000 ? value * 1000 : value;
+        const date = new Date(epochMs);
+        return Number.isFinite(date.getTime()) ? date : null;
       }
 
       const raw = String(value).trim();
+      if (!raw) return null;
 
-      if (!raw) {
-        return null;
+      if (/^\d{10,13}$/.test(raw)) {
+        const n = Number(raw);
+        const date = new Date(raw.length <= 10 ? n * 1000 : n);
+        return Number.isFinite(date.getTime()) ? date : null;
       }
 
-      /*
-        Firebase/ESP32 timestamps can arrive as:
-          2026-08-14T18:33:04
-          2026-08-14T18:33:04Z
-          2026-08-14 18:33:04
-      */
-
+      // Prefer explicit timezone offsets in device timestamps. A timezone-free
+      // timestamp is interpreted in the browser's local timezone.
       let normalized = raw;
-
       if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/.test(normalized)) {
         normalized = normalized.replace(" ", "T");
       }
-
       const parsed = new Date(normalized);
-
-      if (!Number.isFinite(parsed.getTime())) {
-        return null;
-      }
-
-      return parsed;
+      return Number.isFinite(parsed.getTime()) ? parsed : null;
     }
 
     function numeric(value, fallback = "—") {
       const text = sanitize(value, "");
+      const match = text.match(/-?\d[\d,]*(?:\.\d+)?/);
+      if (!match) return fallback;
 
-      const match = text.match(/-?\d+(?:[.,]\d+)?/);
+      let result = match[0];
 
-      if (!match) {
-        return fallback;
+      // Commas followed by exactly three digits are treated as thousands
+      // separators (45,280). Other comma-only forms are decimal commas.
+      if (result.includes(",")) {
+        if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(result)) {
+          result = result.replace(/,/g, "");
+        } else if (!result.includes(".")) {
+          result = result.replace(",", ".");
+        } else {
+          result = result.replace(/,/g, "");
+        }
       }
-
-      return match[0].replace(",", ".");
+      return result;
     }
 
     function metric(map, names, fallback = "—") {
@@ -1677,7 +1714,7 @@
       const age = ageMs(date);
 
       return (
-        age >= 0 &&
+        age >= -CONFIG.futureToleranceMs &&
         age <= CONFIG.staleAfterMs
       );
     }
@@ -1739,7 +1776,7 @@
         );
       }
 
-      const updatedAt = parseTimestamp(raw.updatedAt);
+      const updatedAt = parseTimestamp(raw.updatedAt ?? raw.updated_at ?? raw.timestamp ?? raw.ts);
 
       if (!updatedAt) {
         throw new TypeError(
@@ -1908,143 +1945,44 @@
 
     function bind(payload) {
       const metrics = flattenMetrics(payload);
+      const pick = (names, fallback = "—") => metric(metrics, names, fallback);
 
-      const airQuality = metric(
-        metrics,
-        ["Air Quality"],
-        "UNAVAILABLE"
-      );
+      const airQuality = pick(["Air Quality", "AQI", "Air Quality Index"], "UNAVAILABLE");
+      const pm25 = pick(["PM2.5", "PM₂.₅", "PM 2.5"]);
+      const pm10 = pick(["PM10", "PM₁₀", "PM 10"]);
+      const temperature = pick(["Temperature", "Ambient Temperature"]);
+      const humidity = pick(["Humidity", "Relative Humidity"]);
+      const tds = pick(["Water TDS", "TDS", "Total Dissolved Solids"]);
+      const ph = pick(["pH Level", "PH Level", "pH"]);
+      const hardness = pick(["Estimated Hardness", "Total Hardness", "Water Hardness"]);
 
-      const pm25 = metric(
-        metrics,
-        ["PM2.5", "PM₂.₅"],
-        "—"
-      );
-
-      const pm10 = metric(
-        metrics,
-        ["PM10", "PM₁₀"],
-        "—"
-      );
-
-      const temperature = metric(
-        metrics,
-        ["Temperature"],
-        "—"
-      );
-
-      const humidity = metric(
-        metrics,
-        ["Humidity"],
-        "—"
-      );
-
-      const tds = metric(
-        metrics,
-        ["Water TDS", "TDS"],
-        "—"
-      );
-
-      const ph = metric(
-        metrics,
-        ["pH Level", "PH Level"],
-        "—"
-      );
-
-      const hardness = metric(
-          metrics,
-          ["Estimated Hardness", "Total Hardness"],
-          "—"
-      );
-
-      const solarToday = metric(
-        metrics,
-        ["Solar Today", "Current Solar Output"],
-        "—"
-      );
-
-      const solarMonth = metric(
-        metrics,
-        ["Energy Generated Today", "This Month"],
-        "—"
-      );
-
-      const co2 = metric(
-        metrics,
-        ["CO₂ Saved", "CO2 Saved"],
-        "—"
-      );
-
-      const trees = metric(
-        metrics,
-        ["Trees", "Trees and Palms"],
-        "—"
-      );
-
-      const greenArea = metric(
-        metrics,
-        ["Green Area", "Landscaped Green Area"],
-        "—"
-      );
-
-      const newTrees = metric(
-        metrics,
-        ["New Trees", "New Plantation This Year"],
-        "—"
-      );
+      // Existing organizational KPIs remain as fallbacks. Firebase values
+      // override them whenever matching labels are present in the payload.
+      const solarToday = pick(["Solar Today", "Current Solar Output", "Solar Output"], "3,420");
+      const solarEnergy = pick(["Energy Generated Today", "Solar Energy Today", "This Month"], "86,400");
+      const co2 = pick(["CO₂ Saved", "CO2 Saved", "CO2 Emissions Avoided Today"], "2.8");
+      const trees = pick(["Trees", "Trees and Palms", "Tree Count"], "45,280");
+      const greenArea = pick(["Green Area", "Landscaped Green Area"], "320");
+      const newTrees = pick(["New Trees", "New Plantation This Year", "Plantation This Year"], "1,250");
 
       setBind("aqi", numeric(airQuality));
-      setBind(
-        "aqiTable",
-        numeric(airQuality)
-      );
-
-      setBind(
-        "aqiStatus",
-        airQuality
-          .replace(/\([^)]*\)/g, "")
-          .trim() || "UNAVAILABLE"
-      );
-
+      setBind("aqiTable", numeric(airQuality));
+      setBind("aqiStatus", sanitize(airQuality, "UNAVAILABLE").replace(/\([^)]*\)/g, "").trim());
       setBind("pm25", numeric(pm25));
       setBind("pm10", numeric(pm10));
-
-      /*
-        Preserve the ESP32 unit text where useful, but avoid repeated
-        whitespace in the large display.
-      */
-      setBind(
-        "temperature",
-        sanitize(temperature, "—").replace(/\s+/g, " ")
-      );
-
-      setBind(
-        "humidity",
-        sanitize(humidity, "—").replace(/\s+/g, " ")
-      );
-
+      setBind("temperature", sanitize(temperature, "—").replace(/\s+/g, " "));
+      setBind("humidity", sanitize(humidity, "—").replace(/\s+/g, " "));
       setBind("tds", numeric(tds));
       setBind("ph", numeric(ph));
       setBind("hardness", numeric(hardness));
-
-      setBind("solarToday", "3,420");
-      setBind("solarMonth", "86,400");
-
-      setBind("co2", "2.8");
-      setBind("trees", "45,280");
-
-      setBind("greenArea", "320");
-      setBind("newTrees", "1,250");
-
-      setBind(
-        "temperatureStatus",
-        deriveTemperatureStatus(temperature)
-      );
-
-      setBind(
-        "humidityStatus",
-        deriveHumidityStatus(humidity)
-      );
+      setBind("solarToday", numeric(solarToday));
+      setBind("solarMonth", numeric(solarEnergy));
+      setBind("co2", numeric(co2));
+      setBind("trees", numeric(trees));
+      setBind("greenArea", numeric(greenArea));
+      setBind("newTrees", numeric(newTrees));
+      setBind("temperatureStatus", deriveTemperatureStatus(temperature));
+      setBind("humidityStatus", deriveHumidityStatus(humidity));
     }
 
     /* ------------------------------------------------------------------ */
@@ -2327,21 +2265,21 @@
           state.firebaseConnected = true;
           state.connectionState = "connected";
 
-          if (
-            state.dataState !== "live" &&
-            isFresh(payload.updatedAt)
-          ) {
+          // Refresh changed values even when the device timestamp has only
+          // one-second resolution. Timestamp freshness remains authoritative.
+          const oldContent = JSON.stringify(state.lastPayload?.slides ?? []);
+          const newContent = JSON.stringify(payload.slides);
+          if (oldContent !== newContent) {
             state.lastPayload = payload;
-            state.lastDataUpdate = payload.updatedAt;
             bind(payload);
             saveCache(payload);
-
-            state.dataState = "live";
-            setLoading(false);
-            hideFatal();
-            updateLiveStatus();
           }
 
+          state.dataState = isFresh(payload.updatedAt) ? "live" : "stale";
+          setLoading(false);
+          hideFatal();
+          updateLiveStatus();
+          updateDiagnostics();
           return false;
         }
 
@@ -2701,6 +2639,15 @@
 
             firebaseConnected:
               state.firebaseConnected,
+
+            browserOnline:
+              navigator.onLine,
+
+            expectedDevicePath:
+              CONFIG.firebaseDevicePath,
+
+            staleAfterSeconds:
+              Math.round(CONFIG.staleAfterMs / 1000),
 
             dataState:
               state.dataState,
