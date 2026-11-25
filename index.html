@@ -723,7 +723,7 @@
       position:absolute;
       right:16px;
       bottom:calc(var(--footer) + 18px);
-      z-index:70;
+      z-index:95;
       width:min(440px,88%);
       max-height:60%;
       overflow:auto;
@@ -1451,7 +1451,7 @@
 
         <div class="thank-grid">
           <div class="card people-art">
-            <svg aria-hidden="true" viewbox="0 0 220 220">
+            <svg aria-hidden="true" viewBox="0 0 220 220">
               <circle cx="110" cy="82" fill="#e4f2e8" r="62">
               </circle>
               <path d="M110 24c-16 28-19 58-6 91 14-28 17-59 6-91z" fill="#4daf67">
@@ -1526,7 +1526,7 @@
   (() => {
     "use strict";
 
-    const APP_VERSION = "7.0.0-FIREBASE-PRODUCTION";
+    const APP_VERSION = "7.1.0-FIREBASE-SCHEMA-ALIGNED";
 
     /*
       Firebase Web configuration from the supplied project.
@@ -1553,10 +1553,11 @@
       staleCheckMs: 15 * 1000,
 
       /* Browser cache for the last valid snapshot. */
-      cacheKey: "rfc_environment_last_valid_snapshot_v1",
+      cacheKey: "rfc_environment_last_valid_snapshot_v2",
 
       /* Maximum accepted Firebase payload size. */
-      maxSlides: 12,
+      expectedSlides: 4,
+      maxSlides: 4,
       maxRowsPerSlide: 30,
 
       /* Slideshow. */
@@ -1617,6 +1618,7 @@
       lastFirebaseEventAt: null,
 
       lastError: null,
+      lastSnapshotInfo: null,
       cachedAt: null,
 
       bannerTimer: null
@@ -1641,31 +1643,54 @@
         return new Date(value.getTime());
       }
 
-      if (typeof value !== "string" && typeof value !== "number") return null;
-
       if (typeof value === "number" && Number.isFinite(value)) {
+        // Firebase/ESP32 timestamps may be seconds or milliseconds.
         const epochMs = value < 100000000000 ? value * 1000 : value;
         const date = new Date(epochMs);
         return Number.isFinite(date.getTime()) ? date : null;
       }
 
-      const raw = String(value).trim();
+      if (typeof value !== "string") {
+        return null;
+      }
+
+      const raw = value.trim();
       if (!raw) return null;
 
-      if (/^\d{10,13}$/.test(raw)) {
+      // Legacy ESP32 firmware emitted local time without a timezone.
+      // The ESP32 is configured for India Standard Time (UTC+05:30), so
+      // interpret that legacy format explicitly as IST, not browser-local time.
+      const localIstMatch = raw.match(
+        /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(\.\d{1,3})?$/
+      );
+
+      let normalized = raw;
+
+      if (localIstMatch) {
+        normalized = `${localIstMatch[1]}T${localIstMatch[2]}${localIstMatch[3] || ""}+05:30`;
+      } else if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/.test(raw)) {
+        // Also tolerate the legacy space-separated local timestamp.
+        normalized = raw.replace(/\s+/, "T") + "+05:30";
+      } else if (/^\d{10,13}$/.test(raw)) {
         const n = Number(raw);
         const date = new Date(raw.length <= 10 ? n * 1000 : n);
         return Number.isFinite(date.getTime()) ? date : null;
       }
 
-      // Prefer explicit timezone offsets in device timestamps. A timezone-free
-      // timestamp is interpreted in the browser's local timezone.
-      let normalized = raw;
-      if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/.test(normalized)) {
-        normalized = normalized.replace(" ", "T");
+      // Do not accept arbitrary browser-specific date strings.
+      const isoWithZone =
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/i;
+
+      if (!isoWithZone.test(normalized)) {
+        return null;
       }
+
       const parsed = new Date(normalized);
-      return Number.isFinite(parsed.getTime()) ? parsed : null;
+      if (!Number.isFinite(parsed.getTime())) {
+        return null;
+      }
+
+      return parsed;
     }
 
     function numeric(value, fallback = "—") {
@@ -1731,7 +1756,8 @@
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
-        hour12: false
+        hour12: false,
+        timeZone: "Asia/Kolkata"
       }).format(date);
     }
 
@@ -1763,60 +1789,310 @@
     /* Firebase payload validation                                        */
     /* ------------------------------------------------------------------ */
 
+    function schemaError(message) {
+      throw new TypeError(`Snapshot validation failed: ${message}`);
+    }
+
+    function requireObject(value, path) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        schemaError(`${path} must be a JSON object.`);
+      }
+      return value;
+    }
+
+    function requireString(value, path, maxLength) {
+      if (typeof value !== "string") {
+        schemaError(`${path} must be a string.`);
+      }
+
+      if (value.length > maxLength) {
+        schemaError(`${path} exceeds ${maxLength} characters.`);
+      }
+
+      return value;
+    }
+
+    function requireBoolean(value, path) {
+      if (typeof value !== "boolean") {
+        schemaError(`${path} must be true or false.`);
+      }
+      return value;
+    }
+
+    function requireNumber(value, path) {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        schemaError(`${path} must be a finite JSON number.`);
+      }
+      return value;
+    }
+
+    /*
+      Firebase Realtime Database can return a dense numeric-key collection
+      as an Array or as an Object containing "0", "1", ... keys.
+      Accept both representations, but reject gaps and non-numeric keys.
+    */
+    function indexedCollection(value, path, maxItems) {
+      let items;
+
+      if (Array.isArray(value)) {
+        items = value.slice();
+      } else if (value && typeof value === "object") {
+        const keys = Object.keys(value);
+
+        if (!keys.length) {
+          schemaError(`${path} is empty.`);
+        }
+
+        if (!keys.every((key) => /^(0|[1-9]\d*)$/.test(key))) {
+          schemaError(`${path} must contain only numeric indexes.`);
+        }
+
+        const sorted = keys
+          .map(Number)
+          .sort((a, b) => a - b);
+
+        for (let i = 0; i < sorted.length; i += 1) {
+          if (sorted[i] !== i) {
+            schemaError(`${path} has a missing index at ${i}.`);
+          }
+        }
+
+        items = sorted.map((index) => value[String(index)]);
+      } else {
+        schemaError(`${path} must be an array or numeric-key object.`);
+      }
+
+      if (items.length > maxItems) {
+        schemaError(`${path} contains ${items.length} items; maximum is ${maxItems}.`);
+      }
+
+      for (let index = 0; index < items.length; index += 1) {
+        if (!(index in items) || items[index] === null || items[index] === undefined) {
+          schemaError(`${path} contains a missing/null item at index ${index}.`);
+        }
+      }
+
+      return items;
+    }
+
+    function validateDiagnostics(rawDiagnostics) {
+      const diagnostics = requireObject(rawDiagnostics, "diagnostics");
+
+      const numericFields = [
+        "uptimeMs",
+        "dashboardIntervalMinutes",
+        "sensorAcquisitionIntervalSeconds",
+        "wifiRssi",
+        "freeHeap"
+      ];
+
+      const requiredFields = [
+        ...numericFields,
+        "wifiConnected",
+        "sensors"
+      ];
+
+      for (const field of requiredFields) {
+        if (!Object.prototype.hasOwnProperty.call(diagnostics, field)) {
+          schemaError(`diagnostics.${field} is missing.`);
+        }
+      }
+
+      for (const field of numericFields) {
+        requireNumber(diagnostics[field], `diagnostics.${field}`);
+      }
+
+      requireBoolean(diagnostics.wifiConnected, "diagnostics.wifiConnected");
+
+      const sensors = requireObject(diagnostics.sensors, "diagnostics.sensors");
+
+      const booleanSensorFields = [
+        "sht31",
+        "bme680",
+        "bmp280",
+        "bh1750",
+        "veml6075",
+        "ds3231",
+        "ds18b20",
+        "rtcValid",
+        "systemTimeValid",
+        "PMS5003",
+        "tds",
+        "ph",
+        "rain",
+        "sound"
+      ];
+
+      for (const field of booleanSensorFields) {
+        if (!Object.prototype.hasOwnProperty.call(sensors, field)) {
+          schemaError(`diagnostics.sensors.${field} is missing.`);
+        }
+        requireBoolean(sensors[field], `diagnostics.sensors.${field}`);
+      }
+
+      requireNumber(sensors.bme680Address, "diagnostics.sensors.bme680Address");
+      requireNumber(sensors.bmp280Address, "diagnostics.sensors.bmp280Address");
+
+      const pms = requireObject(
+        sensors.PMS5003Diagnostics,
+        "diagnostics.sensors.PMS5003Diagnostics"
+      );
+
+      const pmsFields = [
+        "validFrames",
+        "headerErrors",
+        "lengthErrors",
+        "checksumErrors",
+        "timeoutErrors",
+        "lastValidFrameMs"
+      ];
+
+      for (const field of pmsFields) {
+        if (!Object.prototype.hasOwnProperty.call(pms, field)) {
+          schemaError(`diagnostics.sensors.PMS5003Diagnostics.${field} is missing.`);
+        }
+        requireNumber(
+          pms[field],
+          `diagnostics.sensors.PMS5003Diagnostics.${field}`
+        );
+      }
+
+      return {
+        ...diagnostics,
+        sensors: {
+          ...sensors,
+          PMS5003Diagnostics: { ...pms }
+        }
+      };
+    }
+
+    function validateAdc(rawAdc) {
+      const adc = requireObject(rawAdc, "adc");
+
+      const requiredFields = [
+        "tdsRaw",
+        "phRaw",
+        "rainRaw",
+        "soundPeakToPeak"
+      ];
+
+      for (const field of requiredFields) {
+        if (!Object.prototype.hasOwnProperty.call(adc, field)) {
+          schemaError(`adc.${field} is missing.`);
+        }
+        requireNumber(adc[field], `adc.${field}`);
+      }
+
+      // Voltage fields are optional because the ESP32 deliberately emits
+      // JSON null for invalid readings; RTDB may omit those null-valued keys.
+      for (const field of ["tdsVoltage", "phVoltage"]) {
+        if (
+          Object.prototype.hasOwnProperty.call(adc, field) &&
+          adc[field] !== null
+        ) {
+          requireNumber(adc[field], `adc.${field}`);
+        }
+      }
+
+      return { ...adc };
+    }
+
     function normalizePayload(raw) {
-      if (!raw || typeof raw !== "object") {
-        throw new TypeError(
-          "Firebase snapshot is empty or not an object."
-        );
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        if (raw === null) {
+          schemaError(
+            `no data exists at "${CONFIG.firebaseDevicePath}". ` +
+            "The ESP32 has not successfully created the latest snapshot yet."
+          );
+        }
+
+        schemaError("the Firebase value at the device path is not a JSON object.");
       }
 
-      if (!Array.isArray(raw.slides)) {
-        throw new TypeError(
-          "Firebase snapshot must contain a slides array."
-        );
+      if (!Object.prototype.hasOwnProperty.call(raw, "updatedAt")) {
+        schemaError("updatedAt is missing from the root snapshot.");
       }
 
-      const updatedAt = parseTimestamp(raw.updatedAt ?? raw.updated_at ?? raw.timestamp ?? raw.ts);
+      const updatedAt = parseTimestamp(raw.updatedAt);
 
       if (!updatedAt) {
-        throw new TypeError(
-          "Firebase snapshot must contain a valid updatedAt timestamp."
+        schemaError(
+          "updatedAt is invalid. Expected YYYY-MM-DDTHH:MM:SS+05:30 " +
+          "(legacy timezone-free ESP32 timestamps are interpreted as IST)."
         );
       }
 
       const age = ageMs(updatedAt);
 
       if (age < -CONFIG.futureToleranceMs) {
-        throw new TypeError(
-          "Firebase snapshot timestamp is too far in the future."
+        schemaError(
+          `updatedAt is ${Math.round(Math.abs(age) / 1000)} seconds in the future. ` +
+          "Check the ESP32 DS3231/NTP clock and timezone."
         );
       }
 
-      const slides = raw.slides
-        .slice(0, CONFIG.maxSlides)
-        .map((slide) => ({
-          title: sanitize(slide?.title, ""),
-          rows: Array.isArray(slide?.rows)
-            ? slide.rows
-                .slice(0, CONFIG.maxRowsPerSlide)
-                .map((row) => ({
-                  label: sanitize(row?.label, ""),
-                  value: sanitize(row?.value, "—")
-                }))
-                .filter((row) => row.label)
-            : []
-        }))
-        .filter((slide) => slide.title || slide.rows.length);
+      if (!Object.prototype.hasOwnProperty.call(raw, "slides")) {
+        schemaError("slides is missing from the root snapshot.");
+      }
 
-      if (!slides.length) {
-        throw new TypeError(
-          "Firebase snapshot contains no dashboard slides."
+      const rawSlides = indexedCollection(
+        raw.slides,
+        "slides",
+        CONFIG.maxSlides
+      );
+
+      if (rawSlides.length !== CONFIG.expectedSlides) {
+        schemaError(
+          `slides must contain exactly ${CONFIG.expectedSlides} entries (indexes 0–3); ` +
+          `Firebase returned ${rawSlides.length}.`
         );
       }
+
+      const slides = rawSlides.map((slide, slideIndex) => {
+        const path = `slides[${slideIndex}]`;
+        requireObject(slide, path);
+
+        const title = requireString(
+          slide.title,
+          `${path}.title`,
+          80
+        );
+
+        const rawRows = indexedCollection(
+          slide.rows,
+          `${path}.rows`,
+          CONFIG.maxRowsPerSlide
+        );
+
+        if (!rawRows.length) {
+          schemaError(`${path}.rows must contain at least one row.`);
+        }
+
+        const rows = rawRows.map((row, rowIndex) => {
+          const rowPath = `${path}.rows[${rowIndex}]`;
+          requireObject(row, rowPath);
+
+          return {
+            label: requireString(row.label, `${rowPath}.label`, 80),
+            value: requireString(row.value, `${rowPath}.value`, 120)
+          };
+        });
+
+        if (rows.some((row) => !row.label.trim())) {
+          schemaError(`${path}.rows contains an empty label.`);
+        }
+
+        return { title, rows };
+      });
+
+      const diagnostics = validateDiagnostics(raw.diagnostics);
+      const adc = validateAdc(raw.adc);
 
       return {
         updatedAt,
-        slides
+        slides,
+        diagnostics,
+        adc
       };
     }
 
@@ -1844,7 +2120,9 @@
     function serializePayload(payload) {
       return {
         updatedAt: payload.updatedAt.toISOString(),
-        slides: payload.slides
+        slides: payload.slides,
+        diagnostics: payload.diagnostics,
+        adc: payload.adc
       };
     }
 
@@ -2319,15 +2597,33 @@
 
       const raw = snapshot.val();
 
+      state.lastSnapshotInfo = {
+        rootType: raw === null ? "null" : Array.isArray(raw) ? "array" : typeof raw,
+        rootKeys: raw && typeof raw === "object" ? Object.keys(raw).slice(0, 30) : [],
+        slidesType: raw && raw.slides !== undefined
+          ? (Array.isArray(raw.slides) ? "array" : typeof raw.slides)
+          : "missing",
+        slideCount: raw && raw.slides
+          ? (Array.isArray(raw.slides) ? raw.slides.length : Object.keys(raw.slides).length)
+          : 0
+      };
+
       let payload;
 
       try {
         payload = normalizePayload(raw);
       } catch (error) {
-        state.lastError = error;
+        const detail = error instanceof Error
+          ? error.message
+          : String(error);
+
+        state.lastError = new Error(detail);
+        console.error("[RFC Dashboard] Invalid Firebase snapshot:", detail, raw);
 
         /*
           Invalid Firebase payload must never destroy valid displayed data.
+          When no valid/cache snapshot exists, show the exact failing field
+          on the waiting overlay instead of a generic message.
         */
         if (state.lastPayload) {
           setLoading(false);
@@ -2341,7 +2637,7 @@
           updateLiveStatus();
 
           banner(
-            "Previous valid data retained • Firebase snapshot is invalid."
+            `Previous valid data retained • ${detail}`
           );
         } else {
           state.dataState = "none";
@@ -2349,7 +2645,7 @@
           setLoading(
             true,
             "Waiting for valid data",
-            "Firebase is connected, but the ESP32 snapshot is invalid."
+            detail
           );
 
           updateLiveStatus();
@@ -2645,6 +2941,9 @@
 
             expectedDevicePath:
               CONFIG.firebaseDevicePath,
+
+            lastSnapshotInfo:
+              state.lastSnapshotInfo,
 
             staleAfterSeconds:
               Math.round(CONFIG.staleAfterMs / 1000),
